@@ -1,0 +1,49 @@
+[tool.poetry]
+name = "recipevoice"
+version = "0.1.0"
+description = "실시간 대화 처리를 통한 MCP 기반 요리 어시스턴트 웹앱 개발 프로젝트"
+authors = ["팀 YoriJori <yorijori-capstone@gmail.com>"]
+readme = "README.md"
+packages = [
+    { include = "backend" },
+    { include = "voice" },
+    { include = "data" },
+    { include = "rag" },
+    { include = "llm" }
+]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+
+# Django 웹앱
+django = "^4.3"
+djangorestframework = "^3.20"
+psycopg2-binary = "^2.9"
+
+# 데이터 처리
+numpy = "^1.26"
+pandas = "^2.1"
+
+# LLM / LangChain
+langchain = "^0.1"
+openai = "^1.9"
+
+# RAG / 벡터 검색
+faiss-cpu = "^1.7"
+# haystack는 필요시 추가
+# farm-haystack = "^1.14"
+
+# 음성 인식/합성
+torch = "^2.2"
+transformers = "^4.36"
+google-cloud-speech = "^2.25"
+boto3 = "^2.0"  # AWS Polly용
+
+[tool.poetry.dev-dependencies]
+pytest = "^7.4"
+black = "^24.3"
+flake8 = "^7.0"
+
+[build-system]
+requires = ["poetry-core>=1.6.0"]
+build-backend = "poetry.core.masonry.api"
