@@ -39,7 +39,7 @@ def check_next_command_from_wav(wav_path: str):
 
 
 if __name__ == "__main__":
-    wav_file = "./voice/test/다음.wav"  # "다음" 단어가 포함된 wav 파일 준비
+    wav_file = "./다음.wav"  # "다음" 단어가 포함된 wav 파일 준비
     if check_next_command_from_wav(wav_file):
         print("✅ '다음' 명령어 인식됨 → 다음 단계로 진행!")
     else:

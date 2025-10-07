@@ -1,26 +1,55 @@
 import os
 from typing import List, Dict, Any
+from voice.TTS.tts_player import generate_tts_audio
 
-# --- Mock Implementations ---
-# When the real servers are ready, you can switch back to the original request-based functions.
+# --- Mock Implementations for RAG and Planning ---
+MOCK_RECIPE_DB = {
+    "6873683": {
+        "title": "엄마의 레시피, 소고기 미역국 끓이는 법",
+        "ingredients": "소고기,미역,쌀뜨물,다진마늘,참기름,국간장,소금"
+    },
+    "6912220": {
+        "title": "순두부찌개. 바지락, 고기 없이도 기가 막힌 순두부찌개 만드는 법",
+        "ingredients": "순두부,대파,양파,애호박,청양고추,달걀,참기름,식용유,고추가루,소금,설탕,굴소스,간장,다진 마늘,멸치육수"
+    },
+    "6883771": {
+        "title": "돼지갈비찜 양념 황금레시피 갈비는 손으로 뜯어 먹어야 제맛!",
+        "ingredients": "돼지갈비,감자,당근,대파,양조간장,설탕,올리고당,맛술,다진 마늘,후추,참기름"
+    },
+    "6983886": {
+        "title": "치킨스튜 닭고기 프리카세(Fricassée) 쉽게 만드는 법",
+        "ingredients": "닭,양파,표고버섯,버터,식용유,기름,맛술,케첩,간장,식초,설탕,소금,밀가루,우유,물,다진마늘,후추,파슬리가루,로즈마리"
+    },
+    "7002443": {
+        "title": "쫄깃한 식감과 버터의 풍미가 느껴지는 닭고기스테이크",
+        "ingredients": "닭다리살,소금,후추,바질가루,버터,올리브유,감자,아스파라거스,간장,올리고당,케찹"
+    }
+}
 
 def search_rag(query: str) -> List[str]:
-    """(Mock) Returns a fixed list of recipe IDs for any query."""
-    print(f"--- MOCK RAG: Searching for '{query}' ---")
-    # Return hardcoded recipe IDs that are known to be in the test data.
-    return ["6873683", "6883771", "6912220", "6983886", "7002443"]
+    """(Smarter Mock v2) Filters recipes by checking query in title OR ingredients."""
+    print(f"--- MOCK RAG V2: Received search query: '{query}' ---")
+    if not query:
+        return []
+    results = []
+    query_lower = query.lower()
+    for recipe_id, data in MOCK_RECIPE_DB.items():
+        title_lower = data["title"].lower()
+        ingredients_lower = data["ingredients"].lower()
+        if query_lower in title_lower or query_lower in ingredients_lower:
+            results.append(recipe_id)
+    print(f"--- MOCK RAG V2: Found {len(results)} matching recipes: {results} ---")
+    return results
 
 def plan_recipe_for_voice(recipe_data: Dict[str, Any]) -> Dict[str, Any]:
     """(Mock) Generates a simple voice-friendly script from recipe data."""
     print(f"--- MOCK PLANNING: Planning recipe '{recipe_data.get('title')}' ---")
-    
     planned_steps = []
     for step in recipe_data.get("steps", []):
         planned_steps.append({
             "order": step["order"],
             "script": f"{step['order']}번째 단계입니다. {step['instruction']}"
         })
-
     return {
         "title": recipe_data.get("title", ""),
         "opening_remark": f"좋아요, 지금부터 {recipe_data.get('title', '요리')} 만들기를 시작하겠습니다.",
@@ -28,83 +57,22 @@ def plan_recipe_for_voice(recipe_data: Dict[str, Any]) -> Dict[str, Any]:
         "closing_remark": "이제 모든 요리가 끝났습니다. 맛있게 드세요! 안내를 종료할까요?"
     }
 
+# --- Real TTS Implementation ---
 def generate_speech(text: str) -> bytes:
-    """(Mock) Returns a pre-existing test WAV file instead of generating speech."""
-    print(f"--- MOCK TTS: Generating speech for '{text[:30]}...' ---")
+    """Calls the actual TTS function from tts_player to generate speech."""
+    print(f"--- Calling REAL TTS for: '{text[:30]}...' ---")
     try:
-        # Use an existing short audio file for testing playback.
-        with open('voice/test/다음.wav', 'rb') as f:
-            return f.read()
-    except FileNotFoundError:
-        print("--- MOCK TTS: Test file not found, returning silent audio. ---")
-        # Fallback to a silent WAV header if the file doesn't exist
-        # Header for a 0.5-sec, 16-bit, 16kHz mono WAV file
+        return generate_tts_audio(text)
+    except Exception as e:
+        print(f"--- REAL TTS failed: {e} ---")
+        # Fallback to silent audio in case of any error
         samplerate = 16000
         duration = 0.5
-        channels = 1
-        bits_per_sample = 16
-        num_samples = int(samplerate * duration)
-        data_size = num_samples * channels * (bits_per_sample // 8)
-        chunk_size = 36 + data_size
-        header = b'RIFF' + chunk_size.to_bytes(4, 'little') + b'WAVEfmt ' + (16).to_bytes(4, 'little') + (1).to_bytes(2, 'little') + channels.to_bytes(2, 'little') + samplerate.to_bytes(4, 'little') + (samplerate * channels * (bits_per_sample // 8)).to_bytes(4, 'little') + (channels * (bits_per_sample // 8)).to_bytes(2, 'little') + bits_per_sample.to_bytes(2, 'little') + b'data' + data_size.to_bytes(4, 'little')
-        return header + (b'\x00' * data_size)
+        header = b'RIFF' + (36).to_bytes(4, 'little') + b'WAVEfmt ' + (16).to_bytes(4, 'little') + (1).to_bytes(2, 'little') + (1).to_bytes(2, 'little') + samplerate.to_bytes(4, 'little') + (samplerate * 2).to_bytes(4, 'little') + (2).to_bytes(2, 'little') + (16).to_bytes(2, 'little') + b'data' + (int(samplerate*duration)*2).to_bytes(4, 'little')
+        return header + (b'\x00' * int(samplerate*duration)*2)
 
+# --- Mock STT Implementation ---
 def recognize_speech(audio_data: bytes) -> str:
     """(Mock) Returns a fixed text command regardless of the audio input."""
     print(f"--- MOCK STT: Recognizing speech ({len(audio_data)} bytes) ---")
-    # In a real scenario, you'd send this to the STT server.
-    # For testing, we can cycle through commands or return a fixed one.
     return "다음"
-
-
-# --- Real Implementations (for when servers are ready) ---
-# You can uncomment these and comment out the mock functions above.
-
-# import requests
-
-# RAG_SERVER_URL = os.getenv("RAG_SERVER_URL", "http://localhost:8001")
-# VOICE_SERVER_URL = os.getenv("VOICE_SERVER_URL", "http://localhost:8002")
-# PLANNING_SERVER_URL = os.getenv("PLANNING_SERVER_URL", "http://localhost:8003")
-
-# class APIClientError(Exception):
-#     """API 클라이언트에서 발생하는 오류를 위한 커스텀 예외 클래스"""
-#     def __init__(self, message, status_code=None):
-#         super().__init__(message)
-#         self.status_code = status_code
-
-# def search_rag(query: str) -> List[str]:
-#     """RAG 서버를 호출하여 검색어에 맞는 레시피 ID 목록을 반환합니다."""
-#     try:
-#         response = requests.get(f"{RAG_SERVER_URL}/search", params={'q': query}, timeout=10)
-#         response.raise_for_status()
-#         return response.json().get("recipe_ids", [])
-#     except requests.exceptions.RequestException as e:
-#         raise APIClientError(f"RAG 서버 연결 오류: {e}") from e
-
-# def plan_recipe_for_voice(recipe_data: Dict[str, Any]) -> Dict[str, Any]:
-#     """플래닝(LLM) 서버를 호출하여 음성 안내에 적합한 레시피 구조를 받습니다."""
-#     try:
-#         response = requests.post(f"{PLANNING_SERVER_URL}/plan", json=recipe_data, timeout=30)
-#         response.raise_for_status()
-#         return response.json()
-#     except requests.exceptions.RequestException as e:
-#         raise APIClientError(f"플래닝 서버 연결 오류: {e}") from e
-
-# def generate_speech(text: str) -> bytes:
-#     """음성(TTS) 서버를 호출하여 텍스트를 음성 데이터로 변환합니다."""
-#     try:
-#         response = requests.post(f"{VOICE_SERVER_URL}/tts", json={'text': text}, timeout=15)
-#         response.raise_for_status()
-#         return response.content
-#     except requests.exceptions.RequestException as e:
-#         raise APIClientError(f"음성(TTS) 서버 연결 오류: {e}") from e
-
-# def recognize_speech(audio_data: bytes) -> str:
-#     """음성(STT) 서버를 호출하여 음성을 텍스트로 변환합니다."""
-#     try:
-#         files = {'audio': audio_data}
-#         response = requests.post(f"{VOICE_SERVER_URL}/stt", files=files, timeout=15)
-#         response.raise_for_status()
-#         return response.json().get("text", "")
-#     except requests.exceptions.RequestException as e:
-#         raise APIClientError(f"음성(STT) 서버 연결 오류: {e}") from e

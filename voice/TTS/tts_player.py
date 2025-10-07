@@ -5,82 +5,96 @@ import numpy as np
 import sounddevice as sd
 from pydub import AudioSegment
 from google.cloud import texttospeech
-from keyboard_listener import wait_for_command
+from google.oauth2 import service_account
+from .keyboard_listener import wait_for_command
 
 temp_files_to_clean = []
 
-# Google TTS 인증
-try:
-    client = texttospeech.TextToSpeechClient()
-except Exception as e:
-    print("Google Cloud 인증 오류:", e)
-    raise
+def get_gcp_credentials_from_env():
+    """Builds Google Cloud credentials from environment variables."""
+    env_keys = {
+        "type": os.getenv("GCP_TYPE"),
+        "project_id": os.getenv("GCP_PROJECT_ID"),
+        "private_key_id": os.getenv("GCP_PRIVATE_KEY_ID"),
+        "private_key": os.getenv("GCP_PRIVATE_KEY", "").replace('\\n', '\n'),
+        "client_email": os.getenv("GCP_CLIENT_EMAIL"),
+        "client_id": os.getenv("GCP_CLIENT_ID"),
+        "auth_uri": os.getenv("GCP_AUTH_URI"),
+        "token_uri": os.getenv("GCP_TOKEN_URI"),
+        "auth_provider_x509_cert_url": os.getenv("GCP_AUTH_PROVIDER_X509_CERT_URL"),
+        "client_x509_cert_url": os.getenv("GCP_CLIENT_X509_CERT_URL"),
+    }
+    if not all([env_keys["type"], env_keys["project_id"], env_keys["private_key"], env_keys["client_email"]]):
+        return None
+    return service_account.Credentials.from_service_account_info(env_keys)
 
+# --- Google TTS Client Initialization ---
+try:
+    credentials = get_gcp_credentials_from_env()
+    if credentials:
+        print("[AUTH] Authenticating Google Cloud via .env variables.")
+        client = texttospeech.TextToSpeechClient(credentials=credentials)
+    else:
+        print("[AUTH] .env variables not found. Falling back to default authentication (GOOGLE_APPLICATION_CREDENTIALS).")
+        client = texttospeech.TextToSpeechClient()
+    print("[AUTH] Google Cloud TTS client initialized successfully.")
+except Exception as e:
+    print(f"[ERROR] Google Cloud Authentication failed: {e}")
+    client = None
+
+def generate_tts_audio(text: str) -> bytes:
+    """Pure function to convert text to audio bytes using Google TTS."""
+    if not client:
+        raise ConnectionError("Google TTS client is not initialized. Check authentication.")
+    
+    synthesis_input = texttospeech.SynthesisInput(text=text)
+    voice = texttospeech.VoiceSelectionParams(
+        language_code="ko-KR", ssml_gender=texttospeech.SsmlVoiceGender.NEUTRAL
+    )
+    audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
+    
+    response = client.synthesize_speech(
+        input=synthesis_input, voice=voice, audio_config=audio_config
+    )
+    return response.audio_content
 
 def speak_audio(audio_segment: AudioSegment):
-    """AudioSegment → numpy array 변환 후 sounddevice로 재생"""
-    print("[디버그] 🎵 오디오 재생 시작")
-    samples = np.array(audio_segment.get_array_of_samples())
-    samples = samples.astype(np.float32) / (2 ** (8 * audio_segment.sample_width - 1))
+    """Plays an AudioSegment using sounddevice."""
+    samples = np.array(audio_segment.get_array_of_samples()).astype(np.float32) / (2**(8 * audio_segment.sample_width - 1))
     if audio_segment.channels > 1:
         samples = samples.reshape((-1, audio_segment.channels))
     sd.play(samples, samplerate=audio_segment.frame_rate)
-    sd.wait()  # 재생 끝날 때까지 블로킹
-    print("[디버그] 🎵 오디오 재생 종료")
-
+    sd.wait()
 
 def speak_and_wait(text: str) -> str:
-    """
-    TTS 생성 → 재생 → 키 입력 대기
-    반환값:
-        "next" / "prev" / "repeat" / "quit"
-    """
+    """(For standalone testing) Generates TTS, saves to file, plays, and waits for keyboard command."""
     filename = f"temp_tts_{uuid.uuid4()}.mp3"
     temp_files_to_clean.append(filename)
-
     try:
-        print("[디버그] 🏗️ TTS 변환 시작")
-        synthesis_input = texttospeech.SynthesisInput(text=text)
-        voice = texttospeech.VoiceSelectionParams(
-            language_code="ko-KR",
-            ssml_gender=texttospeech.SsmlVoiceGender.NEUTRAL
-        )
-        audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
-        response = client.synthesize_speech(
-            input=synthesis_input, voice=voice, audio_config=audio_config
-        )
-
+        audio_content = generate_tts_audio(text)
         with open(filename, "wb") as out:
-            out.write(response.audio_content)
-        print(f"[디버그] ✅ TTS 파일 생성 완료: {filename}")
-
-        print("[디버그] 🎧 AudioSegment 로드 시작")
+            out.write(audio_content)
+        
         audio = AudioSegment.from_file(filename, format="mp3")
-        print("[디버그] 🎧 AudioSegment 로드 완료")
+        speak_audio(audio)
 
-        speak_audio(audio)  # blocking 재생
-
-        # 키 입력 대기
-        print("👉 키 입력으로 단계 진행: d=다음, a=이전, r=반복, q=종료")
+        print("👉 Keyboard commands: d=next, a=prev, r=repeat, q=quit")
         while True:
             cmd = wait_for_command()
             if cmd in ["next", "prev", "repeat", "quit"]:
                 return cmd
             else:
-                print("⚠️ 알 수 없는 키, 다시 눌러주세요.")
-
+                print("Unknown key. Please try again.")
     except Exception as e:
-        print(f"[오류] TTS/파일 처리 실패: {e}")
-        # 오류 발생해도 다음 단계 진행하도록 "next" 반환
+        print(f"[ERROR] Failed during speak_and_wait: {e}")
         return "next"
 
-
 def cleanup_temp_files():
-    print("\n[정리] 임시 오디오 파일 삭제 중...")
+    print("\nCleaning up temporary audio files...")
     for filename in temp_files_to_clean:
         if os.path.exists(filename):
             try:
                 os.remove(filename)
-                print(f" - {filename} 삭제 완료")
+                print(f" - Deleted {filename}")
             except Exception as e:
-                print(f"[경고] {filename} 삭제 실패: {e}")
+                print(f"[WARNING] Failed to delete {filename}: {e}")
