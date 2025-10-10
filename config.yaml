@@ -5,6 +5,7 @@ embedding:
 faiss:
   index_type: flat_ip
   top_k: 8
+  score_threshold: 0.7
 paths:
   raw_data_dir: ./data/storage/raw_data
   preprocessed_dir: ./data/storage/preprocessed_data
