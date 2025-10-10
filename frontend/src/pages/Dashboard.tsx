@@ -5,7 +5,7 @@ import { RecipeCard } from '../components/RecipeCard';
 
 // Define a type for the recipe object from the API
 interface ApiRecipe {
-  source_id: string; // Assuming source_id is the unique identifier
+  recipe_id: string; // Changed from source_id
   title: string;
   // Add other fields if needed, like 'source' if the backend provides it
 }
@@ -42,9 +42,9 @@ export const Dashboard = () => {
         ) : (
           <div className="row justify-content-center">
             {recipes.map((recipe: ApiRecipe) => (
-              <div className="col-lg-8 mb-4" key={recipe.source_id}>
+              <div className="col-lg-8 mb-4" key={recipe.recipe_id}>
                 <RecipeCard 
-                  id={recipe.source_id} 
+                  id={recipe.recipe_id} 
                   title={recipe.title}
                   source="10000recipe" // Placeholder, adjust if API provides it
                   originalTitle={recipe.title}

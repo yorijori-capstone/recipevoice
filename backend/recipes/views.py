@@ -1,11 +1,12 @@
+# backend/recipes/views.py
 from rest_framework import generics, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from django.http import HttpResponse
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
-from .models import Recipe, Ingredient, Step
-from .serializers import RecipeListSerializer, RecipeDetailSerializer, IngredientSerializer, StepSerializer
+from .models import Recipe, Step
+from .serializers import RecipeListSerializer, RecipeDetailSerializer, LLMStepSerializer, StepSerializer
 from core import clients
 import base64
 
@@ -16,9 +17,9 @@ class RecipeListView(generics.ListAPIView):
 
 
 class RecipeDetailView(generics.RetrieveAPIView):
-    queryset = Recipe.objects.prefetch_related('ingredients', 'steps').all()
+    queryset = Recipe.objects.prefetch_related('step_set').all()
     serializer_class = RecipeDetailSerializer
-    lookup_field = 'source_id'
+    lookup_field = 'recipe_id'
 
 
 class SearchView(APIView):
@@ -30,8 +31,8 @@ class SearchView(APIView):
             recipe_ids = clients.search_rag(query)
             if not recipe_ids:
                 return Response([], status=status.HTTP_200_OK)
-            recipes = Recipe.objects.filter(source_id__in=recipe_ids)
-            recipes_dict = {recipe.source_id: recipe for recipe in recipes}
+            recipes = Recipe.objects.filter(recipe_id__in=recipe_ids)
+            recipes_dict = {recipe.recipe_id: recipe for recipe in recipes}
             ordered_recipes = [recipes_dict[id] for id in recipe_ids if id in recipes_dict]
             serializer = RecipeListSerializer(ordered_recipes, many=True)
             return Response(serializer.data, status=status.HTTP_200_OK)
@@ -125,14 +126,14 @@ class VoiceControlView(APIView):
             return Response({"error": "recipe_id is required for start action"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            recipe = Recipe.objects.prefetch_related('ingredients', 'steps').get(source_id=recipe_id)
+            recipe = Recipe.objects.prefetch_related('step_set').get(recipe_id=recipe_id)
         except Recipe.DoesNotExist:
             return Response({"error": "Recipe not found"}, status=status.HTTP_404_NOT_FOUND)
 
         recipe_data = {
             "title": recipe.title,
-            "ingredients": IngredientSerializer(recipe.ingredients.all(), many=True).data,
-            "steps": StepSerializer(recipe.steps.all(), many=True).data
+            "ingredients": [],  # LLM 서버 스키마에 필요 (현재는 빈 값으로 전달)
+            "steps": LLMStepSerializer(recipe.step_set.all(), many=True).data
         }
 
         planned_recipe = clients.plan_recipe_for_voice(recipe_data)

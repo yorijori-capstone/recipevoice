@@ -1,15 +1,23 @@
+# backend/core/clients.py
 import requests
 import base64
 from typing import Dict, Any
 
+# --- RAG & Voice Imports ---
+from pathlib import Path
 from voice.TTS.tts_player import generate_tts_audio
+from rag.retriever import search_rag  # RAG 모듈에서 검색 함수를 직접 import
 
-# --- LLM Planning Server (FastAPI) --- 
-LLM_SERVER_URL = "http://localhost:8001"
-
+# --- Exception Class ---
 class APIClientError(Exception):
     """API 클라이언트에서 발생하는 모든 예외에 대한 기본 클래스"""
     pass
+
+# --- Global Variables ---
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+
+# --- LLM Planning Server (FastAPI) --- 
+LLM_SERVER_URL = "http://localhost:8001"
 
 def plan_recipe_for_voice(recipe_data: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -17,8 +25,8 @@ def plan_recipe_for_voice(recipe_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     print(f"--- Calling LLM Planning Server ({LLM_SERVER_URL}/plan) for recipe: '{recipe_data.get('title')}' ---")
     try:
-        response = requests.post(f"{LLM_SERVER_URL}/plan", json=recipe_data, timeout=120) # 타임아웃을 넉넉하게 설정
-        response.raise_for_status()  # 2xx 상태 코드가 아닐 경우 예외 발생
+        response = requests.post(f"{LLM_SERVER_URL}/plan", json=recipe_data, timeout=300) # 타임아웃을 5분으로 연장
+        response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
         raise APIClientError(f"LLM 플래닝 서버 연결 실패: {e}")
@@ -29,13 +37,11 @@ def handle_control_command(command: str, current_step_data: Dict[str, Any]) -> D
     """
     LLM 플래닝 서버(/control)를 호출하여 '멈춰', '다시' 등의 제어 명령을 처리합니다.
     """
-    # FastAPI의 /control 엔드포인트가 요구하는 데이터 형식에 맞춰 페이로드 구성
     payload = {
         "command": command,
         "current_step_order": current_step_data.get("order"),
         "current_step": current_step_data
     }
-    
     try:
         response = requests.post(f"{LLM_SERVER_URL}/control", json=payload, timeout=30)
         response.raise_for_status()
@@ -45,13 +51,10 @@ def handle_control_command(command: str, current_step_data: Dict[str, Any]) -> D
     except Exception as e:
         raise APIClientError(f"제어 명령 처리 중 예기치 않은 오류 발생: {e}")
 
-
-# --- Mock STT & Real TTS (유지) ---
+# --- STT & TTS Functions ---
 def recognize_speech(audio_data: bytes) -> str:
     """(Mock) 음성 데이터를 받아 텍스트 명령어로 변환합니다."""
     print(f"--- MOCK STT: Recognizing speech ({len(audio_data)} bytes) ---")
-    # TODO: 실제 STT API 연동 필요
-    # 테스트를 위해 "다음", "멈춰", "다시" 등을 번갈아 반환하도록 수정 가능
     import random
     commands = ["다음", "이전", "다시", "멈춰"]
     return random.choice(commands)
@@ -64,15 +67,10 @@ def generate_speech(text: str) -> bytes:
     except Exception as e:
         print(f"--- REAL TTS failed: {e} ---")
         # Fallback to silent audio in case of any error
-        samplerate = 16000
-        duration = 0.5
+        samplerate = 16000; duration = 0.5
         header = b'RIFF' + (36).to_bytes(4, 'little') + b'WAVEfmt ' + (16).to_bytes(4, 'little') + (1).to_bytes(2, 'little') + (1).to_bytes(2, 'little') + samplerate.to_bytes(4, 'little') + (samplerate * 2).to_bytes(4, 'little') + (2).to_bytes(2, 'little') + (16).to_bytes(2, 'little') + b'data' + (int(samplerate*duration)*2).to_bytes(4, 'little')
         return header + (b'\x00' * int(samplerate*duration)*2)
 
-# RAG 기능은 LLM 서버 또는 별도의 RAG 서버에서 처리되어야 하므로
-# Django 클라이언트에서는 search_rag 함수를 제거하거나 수정해야 합니다.
-# 여기서는 우선 비워둡니다.
-def search_rag(query: str) -> list:
-    print(f"--- RAG search is now handled by a dedicated server. This function is deprecated. ---")
-    # TODO: 필요 시 실제 RAG 서버 API 호출 로직 추가
-    return []
+# RAG search_rag 함수는 이제 rag.retriever 모듈에서 직접 import하여 사용합니다.
+# Django의 views.py에서는 `from core import clients`를 통해 `clients.search_rag`를 호출하는데,
+# 이 `clients.py`가 `rag.retriever`의 `search_rag`를 import하므로 최종적으로 연결됩니다.

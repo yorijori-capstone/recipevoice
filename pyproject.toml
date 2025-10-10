@@ -1,9 +1,14 @@
+# ==========================================
+# 📦 Poetry 프로젝트 설정 (RecipeVoice)
+# ==========================================
 [tool.poetry]
 name = "recipevoice"
 version = "0.1.0"
 description = "실시간 대화 처리를 통한 MCP 기반 요리 어시스턴트 웹앱 개발 프로젝트"
 authors = ["팀 YoriJori <yorijori-capstone@gmail.com>"]
 readme = "README.md"
+
+# 프로젝트 내 포함할 패키지 디렉터리들
 packages = [
     { include = "backend" },
     { include = "voice" },
@@ -12,35 +17,72 @@ packages = [
     { include = "llm" }
 ]
 
+# ==========================================
+# 🧩 프로젝트 의존성 (Dependencies)
+# ==========================================
 [tool.poetry.dependencies]
+# Python 버전 명시 (팀 환경: 3.10 기준)
 python = "~3.10"
-django = "^4.2"
-djangorestframework = "^3.15.1"
-requests = "^2.31.0"
-psycopg2-binary = "^2.9"
-numpy = "^1.26"
-pandas = "^2.1"
-langchain = "^0.1"
-openai = "^1.9"
-faiss-cpu = "^1.7"
-torch = "^2.2"
-transformers = "^4.36"
-google-cloud-speech = "^2.25"
-boto3 = "^1.34"
-google-cloud-texttospeech = "^2.31.0"
-pydub = "^0.25.1"
-sounddevice = "^0.5.2"
-soundfile = "^0.13.1"
-python-dotenv = "^1.0.0"
-google-generativeai = "^0.5.4"
-fastapi = "^0.111.0"
-uvicorn = {extras = ["standard"], version = "^0.29.0"}
 
+# ---- Django 웹 프레임워크 관련 ----
+django = "^4.2"                   # 안정적인 LTS 버전
+djangorestframework = "^3.15.1"   # Django REST API 개발용
+psycopg2-binary = "^2.9"          # PostgreSQL 드라이버
+
+# ---- HTTP 요청 및 API 통신 ----
+requests = "^2.31.0"              # 외부 API 통신용
+
+# ---- 데이터 처리 및 연산 ----
+numpy = "^1.26"                   # 수치 계산
+pandas = "^2.1"                   # 데이터프레임 처리
+
+# ---- LLM 및 LangChain 연동 ----
+langchain = "^0.1"                # 에이전트 및 체인 구성
+openai = "^1.9"                   # OpenAI API 클라이언트
+
+# ---- 임베딩 및 벡터 검색 ----
+faiss-cpu = "^1.7"                # RAG 검색용 벡터 인덱싱
+sentence-transformers = "^2.7.0"  # 문장 임베딩 생성
+# haystack는 필요시 추가
+# farm-haystack = "^1.14"
+
+# ---- 딥러닝 / 모델 구동 ----
+optax = "0.2.6"
+torch = "^2.2"                    # PyTorch (음성 모델 등)
+transformers = "^4.36"            # HuggingFace 모델 로드용
+
+
+# ---- 음성 인식/합성 ----
+google-cloud-speech = "^2.25"     # Google Speech-to-Text
+google-cloud-texttospeech = "^2.31.0" # Google Text-to-Speech
+pydub = "^0.25.1"                 # 오디오 파일 변환
+sounddevice = "^0.5.2"            # 실시간 녹음/재생
+soundfile = "^0.13.1"             # WAV/FLAC 등 오디오 입출력
+
+# ---- 클라우드 및 환경 변수 관리 ----
+boto3 = "^1.34"                   # AWS 연동 (TTS 등)
+python-dotenv = "^1.0.0"          # .env 환경 변수 로드
+google-generativeai = "^0.5.4"    # Gemini API 연동
+
+# ---- 서버 및 실행 환경 ----
+fastapi = "^0.111.0"              # API 서버 구성
+uvicorn = {extras = ["standard"], version = "^0.29.0"} # FastAPI 실행
+pyyaml = "^6.0.1"                 # YAML 설정파일 처리
+
+
+# ==========================================
+# 🧪 개발용 의존성 (Dev Dependencies)
+# ==========================================
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4"
 black = "^24.3"
 flake8 = "^7.0"
+ipykernel = "^6.29"
+jupyter = "^1.0"
 
+# ==========================================
+# ⚙️ 빌드 시스템 설정
+# ==========================================
 [build-system]
-requires = ["poetry-core>=1.6.0"]
+requires = ["poetry-core>=1.9.0"]
 build-backend = "poetry.core.masonry.api"
