@@ -1,0 +1,16 @@
+{
+    "mcpServers": {
+      "yorijori-planning": {
+        "command": "poetry",
+        "args": [
+          "run",
+          "python",
+          "-m",
+          "llm.planning_server.mcp_main"
+        ],
+        "env": {
+          "GEMINI_API_KEY": "${GEMINI_API_KEY}"
+        }
+      }
+    }
+  }

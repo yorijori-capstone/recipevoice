@@ -1,65 +1,63 @@
-import os
-from typing import List, Dict, Any
+import requests
+import base64
+from typing import Dict, Any
+
 from voice.TTS.tts_player import generate_tts_audio
 
-# --- Mock Implementations for RAG and Planning ---
-MOCK_RECIPE_DB = {
-    "6873683": {
-        "title": "엄마의 레시피, 소고기 미역국 끓이는 법",
-        "ingredients": "소고기,미역,쌀뜨물,다진마늘,참기름,국간장,소금"
-    },
-    "6912220": {
-        "title": "순두부찌개. 바지락, 고기 없이도 기가 막힌 순두부찌개 만드는 법",
-        "ingredients": "순두부,대파,양파,애호박,청양고추,달걀,참기름,식용유,고추가루,소금,설탕,굴소스,간장,다진 마늘,멸치육수"
-    },
-    "6883771": {
-        "title": "돼지갈비찜 양념 황금레시피 갈비는 손으로 뜯어 먹어야 제맛!",
-        "ingredients": "돼지갈비,감자,당근,대파,양조간장,설탕,올리고당,맛술,다진 마늘,후추,참기름"
-    },
-    "6983886": {
-        "title": "치킨스튜 닭고기 프리카세(Fricassée) 쉽게 만드는 법",
-        "ingredients": "닭,양파,표고버섯,버터,식용유,기름,맛술,케첩,간장,식초,설탕,소금,밀가루,우유,물,다진마늘,후추,파슬리가루,로즈마리"
-    },
-    "7002443": {
-        "title": "쫄깃한 식감과 버터의 풍미가 느껴지는 닭고기스테이크",
-        "ingredients": "닭다리살,소금,후추,바질가루,버터,올리브유,감자,아스파라거스,간장,올리고당,케찹"
-    }
-}
+# --- LLM Planning Server (FastAPI) --- 
+LLM_SERVER_URL = "http://localhost:8001"
 
-def search_rag(query: str) -> List[str]:
-    """(Smarter Mock v2) Filters recipes by checking query in title OR ingredients."""
-    print(f"--- MOCK RAG V2: Received search query: '{query}' ---")
-    if not query:
-        return []
-    results = []
-    query_lower = query.lower()
-    for recipe_id, data in MOCK_RECIPE_DB.items():
-        title_lower = data["title"].lower()
-        ingredients_lower = data["ingredients"].lower()
-        if query_lower in title_lower or query_lower in ingredients_lower:
-            results.append(recipe_id)
-    print(f"--- MOCK RAG V2: Found {len(results)} matching recipes: {results} ---")
-    return results
+class APIClientError(Exception):
+    """API 클라이언트에서 발생하는 모든 예외에 대한 기본 클래스"""
+    pass
 
 def plan_recipe_for_voice(recipe_data: Dict[str, Any]) -> Dict[str, Any]:
-    """(Mock) Generates a simple voice-friendly script from recipe data."""
-    print(f"--- MOCK PLANNING: Planning recipe '{recipe_data.get('title')}' ---")
-    planned_steps = []
-    for step in recipe_data.get("steps", []):
-        planned_steps.append({
-            "order": step["order"],
-            "script": f"{step['order']}번째 단계입니다. {step['instruction']}"
-        })
-    return {
-        "title": recipe_data.get("title", ""),
-        "opening_remark": f"좋아요, 지금부터 {recipe_data.get('title', '요리')} 만들기를 시작하겠습니다.",
-        "planned_steps": planned_steps,
-        "closing_remark": "이제 모든 요리가 끝났습니다. 맛있게 드세요! 안내를 종료할까요?"
-    }
+    """
+    LLM 플래닝 서버(/plan)를 호출하여 레시피에 대한 음성 안내 스크립트를 생성합니다.
+    """
+    print(f"--- Calling LLM Planning Server ({LLM_SERVER_URL}/plan) for recipe: '{recipe_data.get('title')}' ---")
+    try:
+        response = requests.post(f"{LLM_SERVER_URL}/plan", json=recipe_data, timeout=120) # 타임아웃을 넉넉하게 설정
+        response.raise_for_status()  # 2xx 상태 코드가 아닐 경우 예외 발생
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        raise APIClientError(f"LLM 플래닝 서버 연결 실패: {e}")
+    except Exception as e:
+        raise APIClientError(f"플래닝 데이터 처리 중 예기치 않은 오류 발생: {e}")
 
-# --- Real TTS Implementation ---
+def handle_control_command(command: str, current_step_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    LLM 플래닝 서버(/control)를 호출하여 '멈춰', '다시' 등의 제어 명령을 처리합니다.
+    """
+    # FastAPI의 /control 엔드포인트가 요구하는 데이터 형식에 맞춰 페이로드 구성
+    payload = {
+        "command": command,
+        "current_step_order": current_step_data.get("order"),
+        "current_step": current_step_data
+    }
+    
+    try:
+        response = requests.post(f"{LLM_SERVER_URL}/control", json=payload, timeout=30)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        raise APIClientError(f"LLM 제어 서버 연결 실패: {e}")
+    except Exception as e:
+        raise APIClientError(f"제어 명령 처리 중 예기치 않은 오류 발생: {e}")
+
+
+# --- Mock STT & Real TTS (유지) ---
+def recognize_speech(audio_data: bytes) -> str:
+    """(Mock) 음성 데이터를 받아 텍스트 명령어로 변환합니다."""
+    print(f"--- MOCK STT: Recognizing speech ({len(audio_data)} bytes) ---")
+    # TODO: 실제 STT API 연동 필요
+    # 테스트를 위해 "다음", "멈춰", "다시" 등을 번갈아 반환하도록 수정 가능
+    import random
+    commands = ["다음", "이전", "다시", "멈춰"]
+    return random.choice(commands)
+
 def generate_speech(text: str) -> bytes:
-    """Calls the actual TTS function from tts_player to generate speech."""
+    """실제 TTS 함수를 호출하여 음성을 생성합니다."""
     print(f"--- Calling REAL TTS for: '{text[:30]}...' ---")
     try:
         return generate_tts_audio(text)
@@ -71,8 +69,10 @@ def generate_speech(text: str) -> bytes:
         header = b'RIFF' + (36).to_bytes(4, 'little') + b'WAVEfmt ' + (16).to_bytes(4, 'little') + (1).to_bytes(2, 'little') + (1).to_bytes(2, 'little') + samplerate.to_bytes(4, 'little') + (samplerate * 2).to_bytes(4, 'little') + (2).to_bytes(2, 'little') + (16).to_bytes(2, 'little') + b'data' + (int(samplerate*duration)*2).to_bytes(4, 'little')
         return header + (b'\x00' * int(samplerate*duration)*2)
 
-# --- Mock STT Implementation ---
-def recognize_speech(audio_data: bytes) -> str:
-    """(Mock) Returns a fixed text command regardless of the audio input."""
-    print(f"--- MOCK STT: Recognizing speech ({len(audio_data)} bytes) ---")
-    return "다음"
+# RAG 기능은 LLM 서버 또는 별도의 RAG 서버에서 처리되어야 하므로
+# Django 클라이언트에서는 search_rag 함수를 제거하거나 수정해야 합니다.
+# 여기서는 우선 비워둡니다.
+def search_rag(query: str) -> list:
+    print(f"--- RAG search is now handled by a dedicated server. This function is deprecated. ---")
+    # TODO: 필요 시 실제 RAG 서버 API 호출 로직 추가
+    return []

@@ -6,79 +6,68 @@
 
 프로젝트를 실행하기 위해 다음 소프트웨어가 필요합니다.
 
--   Python (3.11 권장)
+-   Python (3.10 이상)
 -   Poetry (Python 패키지 및 의존성 관리 도구)
 -   Node.js 및 npm (프론트엔드 개발 환경)
 
-## 2. 백엔드 설정
+## 2. 초기 환경 설정
 
-### 2.1. 의존성 설치
+최초 실행 시 한 번만 수행하면 되는 설정 과정입니다.
 
-Poetry를 사용하여 Python 의존성을 설치합니다.
-
+### 2.1. Python 의존성 설치
 ```bash
+# poetry가 설치되어 있지 않다면 먼저 설치해야 합니다.
 poetry install
 ```
 
-### 2.2. 가상환경 활성화
-
-```bash
-poetry shell
-```
-
-### 2.3. 데이터베이스 마이그레이션
-
-Django 모델을 기반으로 데이터베이스를 설정합니다.
-
-```bash
-cd backend
-python manage.py migrate
-```
-
-### 2.4. 초기 데이터 로드
-
-`all_recipes.ndjson` 파일의 레시피 데이터를 데이터베이스에 로드합니다.
-
-```bash
-python manage.py load_recipes ../data/recipes/all_recipes.ndjson
-```
-
-### 2.5. 백엔드 서버 실행
-
-Django 개발 서버를 시작합니다.
-
-```bash
-python manage.py runserver
-```
-
-서버는 `http://127.0.0.1:8000`에서 실행됩니다.
-
-## 3. 프론트엔드 설정
-
-### 3.1. 프론트엔드 디렉토리로 이동
-
+### 2.2. Frontend 의존성 설치
 ```bash
 cd frontend
-```
-
-### 3.2. 의존성 설치
-
-npm을 사용하여 프론트엔드 의존성을 설치합니다.
-
-```bash
 npm install
+cd ..
 ```
 
-### 3.3. 프론트엔드 개발 서버 실행
-
-Vite 개발 서버를 시작합니다.
-
+### 2.3. 데이터베이스 설정 및 데이터 로드
 ```bash
+# 가상환경에 진입합니다.
+poetry shell
+
+# (가상환경 안에서) Django 데이터베이스를 생성합니다.
+python backend/manage.py migrate
+
+# (가상환경 안에서) 초기 레시피 데이터를 로드합니다.
+python backend/manage.py load_recipes data/recipes/all_recipes.ndjson
+
+# (가상환경 안에서) 빠져나옵니다.
+exit
+```
+
+## 3. 서버 실행
+
+프로젝트를 실행하려면 **3개의 터미널**을 각각 열고 아래의 서버들을 개별적으로 실행해야 합니다.
+
+### 3.1. 터미널 1: Django 백엔드 서버
+```bash
+# recipevoice 루트 디렉토리에서 실행
+poetry run python backend/manage.py runserver
+```
+> Django 백엔드 서버는 `http://127.0.0.1:8000`에서 실행됩니다.
+
+### 3.2. 터미널 2: LLM 플래닝 서버
+```bash
+# recipevoice 루트 디렉토리에서 실행
+poetry run python -m llm.planning_server.main
+```
+> LLM 플래닝 서버는 `http://127.0.0.1:8001`에서 실행됩니다.
+
+### 3.3. 터미널 3: 프론트엔드 개발 서버
+```bash
+# recipevoice 루트 디렉토리에서 실행
+cd frontend
 npm run dev
 ```
-
-애플리케이션은 `http://localhost:5173`에서 접속할 수 있습니다.
+> 프론트엔드 애플리케이션은 `http://localhost:5173`에서 접속할 수 있습니다.
 
 ## 4. 사용법
 
-프론트엔드 개발 서버가 실행되면 `http://localhost:5173`으로 접속하여 애플리케이션을 사용할 수 있습니다.
+모든 서버가 실행되면 웹 브라우저에서 `http://localhost:5173`으로 접속하여 애플리케이션을 사용할 수 있습니다.
