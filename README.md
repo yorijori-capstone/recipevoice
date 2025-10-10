@@ -14,6 +14,20 @@
 
 최초 실행 시 한 번만 수행하면 되는 설정 과정입니다.
 
+### 2.0. OS별 사전 설치 항목
+
+`PyAudio`는 음성 입출력을 위해 시스템 라이브러리 **PortAudio**에 의존합니다.  
+운영체제별로 아래 명령어를 먼저 실행한 후, `poetry install`을 진행하세요.
+
+| 운영체제 | 설치 명령어 |
+|-----------|--------------|
+| **macOS (Apple Silicon 포함)** | `brew install portaudio` |
+| **Windows** | `pip install pipwin && pipwin install pyaudio` |
+| **Linux (Ubuntu 등)** | `sudo apt install portaudio19-dev` |
+
+> 💡 위 명령어는 **최초 1회만 실행**하면 됩니다.  
+> 이미 PortAudio가 설치되어 있다면 생략 가능합니다.
+
 ### 2.1. Python 의존성 설치
 ```bash
 # poetry가 설치되어 있지 않다면 먼저 설치해야 합니다.

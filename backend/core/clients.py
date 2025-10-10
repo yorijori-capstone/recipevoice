@@ -5,7 +5,8 @@ from typing import Dict, Any
 
 # --- RAG & Voice Imports ---
 from pathlib import Path
-from voice.TTS.tts_player import generate_tts_audio
+from voice.tts_service import generate_tts_audio
+from voice.stt_service import recognize_speech_from_audio
 from rag.retriever import search_rag  # RAG 모듈에서 검색 함수를 직접 import
 
 # --- Exception Class ---
@@ -51,13 +52,33 @@ def handle_control_command(command: str, current_step_data: Dict[str, Any]) -> D
     except Exception as e:
         raise APIClientError(f"제어 명령 처리 중 예기치 않은 오류 발생: {e}")
 
+def chat_with_llm(user_input: str, chat_history: str) -> Dict[str, Any]:
+    """
+    LLM 플래닝 서버(/chat)를 호출하여 일반적인 사용자 대화를 처리합니다.
+    """
+    payload = {
+        "input": user_input,
+        "chat_history": chat_history
+    }
+    print(f"--- Calling LLM Chat Server ({LLM_SERVER_URL}/chat) with input: '{user_input}' ---")
+    try:
+        response = requests.post(f"{LLM_SERVER_URL}/chat", json=payload, timeout=60)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        raise APIClientError(f"LLM 챗 서버 연결 실패: {e}")
+    except Exception as e:
+        raise APIClientError(f"챗 응답 처리 중 예기치 않은 오류 발생: {e}")
+
 # --- STT & TTS Functions ---
 def recognize_speech(audio_data: bytes) -> str:
-    """(Mock) 음성 데이터를 받아 텍스트 명령어로 변환합니다."""
-    print(f"--- MOCK STT: Recognizing speech ({len(audio_data)} bytes) ---")
-    import random
-    commands = ["다음", "이전", "다시", "멈춰"]
-    return random.choice(commands)
+    """실제 STT 함수를 호출하여 음성 데이터를 텍스트로 변환합니다."""
+    print(f"--- Calling REAL STT to process audio data ---")
+    try:
+        return recognize_speech_from_audio(audio_data)
+    except Exception as e:
+        print(f"--- REAL STT failed: {e} ---")
+        return f"STT 오류: {e}"
 
 def generate_speech(text: str) -> bytes:
     """실제 TTS 함수를 호출하여 음성을 생성합니다."""
