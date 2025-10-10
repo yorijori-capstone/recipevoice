@@ -70,24 +70,51 @@ class VoiceControlView(APIView):
             return Response({"error": "audio_base64 is required for recognize_command action"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            # Add padding to base64 string if missing
-            missing_padding = len(audio_base64) % 4
-            if missing_padding:
-                audio_base64 += '=' * (4 - missing_padding)
-            
             audio_data = base64.b64decode(audio_base64)
             command_text = clients.recognize_speech(audio_data)
 
-            # Map command text to action
-            # This is a simple example, can be expanded
+            # Map command text to simple navigation or complex control command
             if "다음" in command_text:
-                action = "next"
+                return self.navigate_step(request, "next")
             elif "이전" in command_text:
-                action = "prev"
+                return self.navigate_step(request, "prev")
+            
+            # More complex commands are handled by the LLM server
             else:
-                action = "repeat" # or some default/error action
+                command_map = {
+                    "다시": "retry",
+                    "뭐라고": "clarify",
+                    "멈춰": "pause",
+                    "계속": "resume"
+                }
+                # Find the first matching command
+                action = next((cmd for kor, cmd in command_map.items() if kor in command_text), None)
 
-            return self.navigate_step(request, action)
+                if not action:
+                    # If no command is recognized, repeat the current step
+                    return self.navigate_step(request, "repeat")
+
+                # Get current step data from session to send to the control API
+                planned_recipe = request.session.get('planned_recipe')
+                current_step_index = request.session.get('current_step', 0)
+                
+                if not planned_recipe or not (0 <= current_step_index < len(planned_recipe.get('planned_steps', []))):
+                    return self.navigate_step(request, "repeat") # Fallback
+                
+                current_step_data = planned_recipe['planned_steps'][current_step_index]
+
+                # Call the new control command handler
+                response_data = clients.handle_control_command(action, current_step_data)
+                text_to_speak = response_data.get("message", "오류가 발생했습니다.")
+                
+                # Generate speech and send response directly
+                audio_content = clients.generate_speech(text_to_speak)
+                return Response({
+                    'text': text_to_speak,
+                    'audio_base64': base64.b64encode(audio_content).decode('utf-8'),
+                    'steps': [step['script'] for step in planned_recipe.get('planned_steps', [])],
+                    'current_step_index': current_step_index
+                })
 
         except Exception as e:
             return Response({"error": f"Error processing audio: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
