@@ -5,7 +5,7 @@ import { SearchBar } from '../components/SearchBar';
 
 // Type from Dashboard
 interface ApiRecipe {
-  source_id: string;
+  recipe_id: string;
   title: string;
 }
 
@@ -43,9 +43,9 @@ export const SearchResults = () => {
       ) : recipes.length > 0 ? (
         <div className="row justify-content-center">
           {recipes.map(recipe => (
-            <div className="col-lg-8 mb-4" key={recipe.source_id}>
+            <div className="col-lg-8 mb-4" key={recipe.recipe_id}>
               <RecipeCard 
-                id={recipe.source_id} 
+                id={recipe.recipe_id} 
                 title={recipe.title} 
                 source="10000recipe" 
                 originalTitle={recipe.title}

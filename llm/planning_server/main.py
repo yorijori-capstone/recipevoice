@@ -166,6 +166,10 @@ class ControlRequest(BaseModel):
     current_step_order: int = Field(..., description="현재 진행 중인 단계 번호")
     current_step: PlannedStep = Field(..., description="현재 단계 정보")
 
+class ChatRequest(BaseModel):
+    """채팅 요청 모델"""
+    input: str
+    chat_history: str = ""
 
 @app.post("/control")
 async def handle_control_command(request: ControlRequest):
@@ -207,6 +211,25 @@ async def handle_control_command(request: ControlRequest):
         response["action"] = "fallback_script를 재생"
     
     return response
+
+@app.post("/chat")
+async def handle_chat(request: ChatRequest):
+    """
+    일반적인 사용자 대화를 처리합니다.
+    LangChain 에이전트의 요청을 받아 LLM을 호출하고 응답을 반환합니다.
+    """
+    try:
+        # LLM 클라이언트를 사용하여 대화 응답 생성
+        response_text = llm_client.generate_chat_response(
+            user_input=request.input,
+            chat_history=request.chat_history
+        )
+        return {"output": response_text}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, 
+            detail=f"채팅 처리 실패: {str(e)}"
+        )
 
 if __name__ == "__main__":
     start_server()

@@ -116,6 +116,24 @@ class LLMClient:
                     "각 step은 'order'와 'script' 필드를 가져야 합니다."
                 )
 
+    def generate_chat_response(self, user_input: str, chat_history: str) -> str:
+        """
+        사용자 입력과 대화 기록을 바탕으로 일반적인 대화 응답을 생성합니다.
+        """
+        full_prompt = f"{chat_history}\n\n사용자: {user_input}\n에이전트:"
+        
+        try:
+            response = self.model.generate_content(
+                full_prompt,
+                generation_config={
+                    'temperature': 0.7,
+                    'max_output_tokens': 2048,
+                }
+            )
+            return response.text
+        except Exception as e:
+            raise ValueError(f"LLM 채팅 응답 생성 실패: {str(e)}")
+
 
 # 테스트용 함수
 if __name__ == "__main__":
