@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
-from typing import List
+from typing import List, Optional
+from datetime import datetime
 
 
 # ===== 입력 스키마 =====
@@ -98,3 +99,35 @@ class PlanningOutput(BaseModel):
                 "closing_remark": "이제 모든 요리가 끝났습니다. 맛있게 드세요! 안내를 종료할까요?"
             }
         }
+
+
+# ===== 에러 응답 스키마 (신규 추가) =====
+class ErrorResponse(BaseModel):
+    """에러 발생 시 응답 포맷"""
+    error: str = Field(..., description="에러 타입")
+    message: str = Field(..., description="사용자 친화적 에러 메시지")
+    suggestion: str = Field(..., description="해결 방법 제안")
+    timestamp: str = Field(
+        default_factory=lambda: datetime.now().isoformat(),
+        description="에러 발생 시각"
+    )
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "error": "INVALID_RECIPE",
+                "message": "레시피 데이터가 올바르지 않습니다.",
+                "suggestion": "재료와 조리 단계가 포함된 레시피를 입력해주세요.",
+                "timestamp": "2025-10-15T14:30:00"
+            }
+        }
+
+
+class RecipeNotFoundError(BaseModel):
+    """레시피를 찾을 수 없을 때 반환"""
+    error: str = "RECIPE_NOT_FOUND"
+    message: str = "요청하신 레시피를 찾을 수 없습니다."
+    suggestion: str = "레시피 ID를 확인하거나, 레시피 이름으로 검색해보세요."
+    timestamp: str = Field(
+        default_factory=lambda: datetime.now().isoformat()
+    )
