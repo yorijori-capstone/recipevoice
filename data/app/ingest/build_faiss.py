@@ -26,15 +26,30 @@ from data.app.emb_local import LocalEmbedder
 embedder = LocalEmbedder(MODEL_NAME)
 
 # -------------------------
-# 2. DB 연결 및 chunk 로드
+# 2. DB 연결 및 스텝 텍스트 로드
+#    - step 테이블 기준으로 텍스트 임베딩/색인
 # -------------------------
 conn = sqlite3.connect(SQLITE_PATH)
 conn.row_factory = sqlite3.Row
 
-rows = conn.execute("SELECT chunk_id, text FROM chunk ORDER BY rowid").fetchall()
+# 존재 컬럼 확인 (스키마 안전성 확보)
+def table_has_columns(cur, table, needed):
+    cur.execute(f"PRAGMA table_info({table})")
+    cols = {r[1] for r in cur.fetchall()}
+    return all(c in cols for c in needed), cols
+
+cur = conn.cursor()
+has_step, step_cols = table_has_columns(cur, "step", {"recipe_id", "step_no", "text"})
+if not has_step:
+    raise RuntimeError(f"Required columns not found in step table. Found: {step_cols}")
+
+rows = conn.execute(
+    "SELECT recipe_id, step_no, text FROM step ORDER BY recipe_id, step_no"
+).fetchall()
 texts = [r["text"] for r in rows]
-chunk_ids = [r["chunk_id"] for r in rows]
-print(f"chunks: {len(texts)}")
+meta = [(str(r["recipe_id"]), int(r["step_no"])) for r in rows]
+chunk_ids = [f"{rid}:{sno}" for rid, sno in meta]
+print(f"steps indexed: {len(texts)}")
 
 # -------------------------
 # 3. 임베딩 & FAISS 인덱스
@@ -75,21 +90,57 @@ print("faiss ntotal:", index.ntotal)
 
 # -------------------------
 # 4. 메타 테이블 갱신
+#    - vector_idx, text, recipe_id, step_no 저장
 # -------------------------
-# 테이블 구조 예시:
-# chunk_embedding_meta(chunk_id TEXT, model_name TEXT, dim INTEGER, faiss_vector_id INTEGER)
+conn.execute(
+    """
+    CREATE TABLE IF NOT EXISTS chunk_embedding_meta (
+        chunk_id TEXT,
+        text TEXT,
+        recipe_id TEXT,
+        step_no INTEGER,
+        model_name TEXT,
+        dim INTEGER,
+        vector_idx INTEGER
+    )
+    """
+)
+
+# 기존 테이블이 있을 경우, 필요한 컬럼이 없으면 추가 (SQLite는 IF NOT EXISTS 절을 컬럼에 지원하지 않음)
+cur = conn.cursor()
+cur.execute("PRAGMA table_info(chunk_embedding_meta)")
+existing_cols = {r[1] for r in cur.fetchall()}
+required_cols = [
+    ("chunk_id", "TEXT"),
+    ("text", "TEXT"),
+    ("recipe_id", "TEXT"),
+    ("step_no", "INTEGER"),
+    ("model_name", "TEXT"),
+    ("dim", "INTEGER"),
+    ("vector_idx", "INTEGER"),
+    # for backward compatibility with previous schema
+    ("faiss_vector_id", "INTEGER"),
+]
+for col_name, col_type in required_cols:
+    if col_name not in existing_cols:
+        conn.execute(f"ALTER TABLE chunk_embedding_meta ADD COLUMN {col_name} {col_type}")
 conn.execute("DELETE FROM chunk_embedding_meta")
 
-for i, cid in enumerate(chunk_ids):
+for i, (cid, (rid, sno), text) in enumerate(zip(chunk_ids, meta, texts)):
+    # Build dynamic column list to satisfy existing NOT NULL constraints
+    insert_cols = ["chunk_id", "text", "recipe_id", "step_no", "model_name", "dim", "vector_idx"]
+    values = [cid, text, rid, sno, MODEL_NAME, DIM, i]
+    if "faiss_vector_id" in existing_cols:
+        insert_cols.append("faiss_vector_id")
+        values.append(i)
+
+    placeholders = ", ".join(["?"] * len(insert_cols))
+    projection = ", ".join(insert_cols)
     conn.execute(
-        """
-        INSERT INTO chunk_embedding_meta
-        (chunk_id, model_name, dim, faiss_vector_id)
-        VALUES (?, ?, ?, ?)
-        """,
-        (cid, MODEL_NAME, DIM, i)
+        f"INSERT INTO chunk_embedding_meta ({projection}) VALUES ({placeholders})",
+        tuple(values),
     )
 
 conn.commit()
 conn.close()
-print("chunk_embedding_meta written")
+print("chunk_embedding_meta written (vector_idx, text, recipe_id, step_no)")
