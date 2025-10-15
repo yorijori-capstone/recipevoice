@@ -1,5 +1,5 @@
-# recipe_runner.py
 from .tts_player import speak_and_wait, cleanup_temp_files
+from .stt_listener import wait_for_next_command_from_mic
 
 def run_recipe(steps):
     """
@@ -9,7 +9,7 @@ def run_recipe(steps):
     if not steps:
         raise ValueError("steps 리스트를 전달해야 합니다.")
 
-    print("🍝 레시피 안내 시작\n")
+    print("\n🍝 레시피 안내 시작\n")
 
     i = 0
     while i < len(steps):
@@ -20,12 +20,15 @@ def run_recipe(steps):
         # 현재 단계 TTS 안내
         speak_and_wait(full_text)
 
-        # 명령어(STT 결과) 대기
-        cmd = None
+        # 명령어 대기 (TTS로 안내만 하고, 실제 인식은 STT로)
+        speak_and_wait("명령어를 말하세요... (다음, 이전, 다시, 종료)")
+        cmd = wait_for_next_command_from_mic()
+
+        # 인식 실패 시 반복
         while cmd not in ["next", "prev", "repeat", "quit"]:
-            cmd = speak_and_wait("명령어를 말하세요... (다음, 이전, 다시, 종료)")
-            if cmd is None:
-                print("❌ 인식 실패 → 다시 말해주세요.")
+            print("❌ 인식 실패 → 다시 말해주세요.")
+            speak_and_wait("인식에 실패했습니다. 다시 말해주세요.")
+            cmd = wait_for_next_command_from_mic()
 
         # 명령어 처리
         if cmd == "next":

@@ -9,7 +9,6 @@ def recipe_tool(steps_list: str):
     문자열 또는 리스트 형태의 레시피 단계를 입력받아
     파싱 후 단계별로 STT 제어가 가능한 TTS 안내를 실행합니다.
     """
-    print("🍝 레시피 안내 시작")
 
     # 1️⃣ 문자열 → Python 객체로 변환 시도
     try:
