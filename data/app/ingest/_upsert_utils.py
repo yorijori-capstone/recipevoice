@@ -1,3 +1,4 @@
+# 프로젝트 루트에서
 # data/app/ingest/_upsert_utils.py
 from __future__ import annotations
 import os, sqlite3, yaml, hashlib, uuid
