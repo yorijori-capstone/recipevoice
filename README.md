@@ -41,6 +41,11 @@ npm install
 cd ..
 ```
 
+⚠️ Python 버전은 3.10을 사용합니다:
+```bash
+poetry env use 3.10
+```
+
 ### 2.3. 데이터베이스 및 벡터 인덱스 생성
 
 `data/storage/raw_data` 디렉토리에 레시피 원본 JSON 파일들이 준비되어 있어야 합니다.
@@ -89,3 +94,21 @@ npm run dev
 ## 4. 사용법
 
 모든 서버가 실행되면 웹 브라우저에서 `http://localhost:5173`으로 접속하여 애플리케이션을 사용할 수 있습니다.
+
+## 5. FastAPI 서버 실행 (대안)
+
+Django 대신 FastAPI 서버를 사용하려면:
+
+```bash
+poetry run uvicorn dbserver.app.main:app --reload --port 8000
+```
+
+### 스모크 테스트
+
+```bash
+curl http://127.0.0.1:8000/health
+curl "http://127.0.0.1:8000/search?query=된장찌개&k=3"
+curl http://127.0.0.1:8000/recipes/6873683
+# (플랜 기능은 다른 파트에서 담당하므로 제외)
+curl -X POST http://127.0.0.1:8000/step/next -H "Content-Type: application/json" -d '{"recipe_id":6873683,"current":1,"context":"미역 불림 완료"}'
+```
