@@ -1,11 +1,13 @@
+# backend/recipes/views.py
+import json
 from rest_framework import generics, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from django.http import HttpResponse
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
-from .models import Recipe, Ingredient, Step
-from .serializers import RecipeListSerializer, RecipeDetailSerializer, IngredientSerializer, StepSerializer
+from .models import Recipe, Step, Chunk
+from .serializers import RecipeListSerializer, RecipeDetailSerializer, LLMStepSerializer, StepSerializer
 from core import clients
 import base64
 
@@ -16,9 +18,9 @@ class RecipeListView(generics.ListAPIView):
 
 
 class RecipeDetailView(generics.RetrieveAPIView):
-    queryset = Recipe.objects.prefetch_related('ingredients', 'steps').all()
+    queryset = Recipe.objects.prefetch_related('step_set').all()
     serializer_class = RecipeDetailSerializer
-    lookup_field = 'source_id'
+    lookup_field = 'recipe_id'
 
 
 class SearchView(APIView):
@@ -30,8 +32,8 @@ class SearchView(APIView):
             recipe_ids = clients.search_rag(query)
             if not recipe_ids:
                 return Response([], status=status.HTTP_200_OK)
-            recipes = Recipe.objects.filter(source_id__in=recipe_ids)
-            recipes_dict = {recipe.source_id: recipe for recipe in recipes}
+            recipes = Recipe.objects.filter(recipe_id__in=recipe_ids)
+            recipes_dict = {recipe.recipe_id: recipe for recipe in recipes}
             ordered_recipes = [recipes_dict[id] for id in recipe_ids if id in recipes_dict]
             serializer = RecipeListSerializer(ordered_recipes, many=True)
             return Response(serializer.data, status=status.HTTP_200_OK)
@@ -39,11 +41,31 @@ class SearchView(APIView):
             return Response({"error": str(e)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
 
+from llm.agent.tool.recipe_runner import run_agent_once
+
+@method_decorator(csrf_exempt, name='dispatch')
+class LangchainAgentView(APIView):
+    """
+    LangChain 에이전트와 상호작용하는 API 뷰.
+    사용자 발화와 대화 기록을 받아 에이전트를 실행하고 응답을 반환합니다.
+    """
+    def post(self, request, *args, **kwargs):
+        user_input = request.data.get('input')
+        chat_history = request.data.get('chat_history', '')
+
+        if not user_input:
+            return Response({"error": "'input' 필드는 필수입니다."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # LangChain 에이전트 실행
+        response_text = run_agent_once(user_input, chat_history)
+
+        return Response({
+            "output": response_text,
+            "chat_history": chat_history + f"\n사용자: {user_input}\n에이전트: {response_text}"
+        })
+
 @method_decorator(csrf_exempt, name='dispatch')
 class VoiceControlView(APIView):
-    """
-    음성 안내 흐름을 제어하는 API 뷰 (오케스트레이터)
-    """
     def post(self, request, *args, **kwargs):
         action = request.data.get('action')
 
@@ -75,9 +97,13 @@ class VoiceControlView(APIView):
 
             # Map command text to simple navigation or complex control command
             if "다음" in command_text:
-                return self.navigate_step(request, "next")
+                response = self.navigate_step(request, "next")
+                response.data['recognized_text'] = command_text
+                return response
             elif "이전" in command_text:
-                return self.navigate_step(request, "prev")
+                response = self.navigate_step(request, "prev")
+                response.data['recognized_text'] = command_text
+                return response
             
             # More complex commands are handled by the LLM server
             else:
@@ -92,14 +118,18 @@ class VoiceControlView(APIView):
 
                 if not action:
                     # If no command is recognized, repeat the current step
-                    return self.navigate_step(request, "repeat")
+                    response = self.navigate_step(request, "repeat")
+                    response.data['recognized_text'] = command_text
+                    return response
 
                 # Get current step data from session to send to the control API
                 planned_recipe = request.session.get('planned_recipe')
                 current_step_index = request.session.get('current_step', 0)
                 
                 if not planned_recipe or not (0 <= current_step_index < len(planned_recipe.get('planned_steps', []))):
-                    return self.navigate_step(request, "repeat") # Fallback
+                    response = self.navigate_step(request, "repeat") # Fallback
+                    response.data['recognized_text'] = command_text
+                    return response
                 
                 current_step_data = planned_recipe['planned_steps'][current_step_index]
 
@@ -113,11 +143,15 @@ class VoiceControlView(APIView):
                     'text': text_to_speak,
                     'audio_base64': base64.b64encode(audio_content).decode('utf-8'),
                     'steps': [step['script'] for step in planned_recipe.get('planned_steps', [])],
-                    'current_step_index': current_step_index
+                    'current_step_index': current_step_index,
+                    'recognized_text': command_text
                 })
 
         except Exception as e:
-            return Response({"error": f"Error processing audio: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({
+                "error": f"Error processing audio: {str(e)}",
+                "recognized_text": locals().get("command_text", "")
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def start_guidance(self, request):
         recipe_id = request.data.get('recipe_id')
@@ -125,14 +159,36 @@ class VoiceControlView(APIView):
             return Response({"error": "recipe_id is required for start action"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            recipe = Recipe.objects.prefetch_related('ingredients', 'steps').get(source_id=recipe_id)
+            recipe = Recipe.objects.prefetch_related('step_set').get(recipe_id=recipe_id)
         except Recipe.DoesNotExist:
             return Response({"error": "Recipe not found"}, status=status.HTTP_404_NOT_FOUND)
 
+        steps_queryset = recipe.step_set.all().order_by('step_no')
+
+        ingredient_chunks = Chunk.objects.filter(recipe=recipe, section='ingredients').order_by('step_no')
+        ingredients_payload = []
+        for chunk in ingredient_chunks:
+            text = (chunk.text or "").strip()
+            if not text:
+                continue
+            name = text
+            quantity = ""
+            if chunk.meta_json:
+                try:
+                    meta = json.loads(chunk.meta_json)
+                    name = meta.get('name', name)
+                    quantity = meta.get('quantity', "") or ""
+                except json.JSONDecodeError:
+                    pass
+            ingredients_payload.append({
+                "name": name,
+                "quantity": quantity
+            })
+
         recipe_data = {
             "title": recipe.title,
-            "ingredients": IngredientSerializer(recipe.ingredients.all(), many=True).data,
-            "steps": StepSerializer(recipe.steps.all(), many=True).data
+            "ingredients": ingredients_payload,
+            "steps": LLMStepSerializer(steps_queryset, many=True).data
         }
 
         planned_recipe = clients.plan_recipe_for_voice(recipe_data)

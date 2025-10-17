@@ -14,6 +14,20 @@
 
 최초 실행 시 한 번만 수행하면 되는 설정 과정입니다.
 
+### 2.0. OS별 사전 설치 항목
+
+`PyAudio`는 음성 입출력을 위해 시스템 라이브러리 **PortAudio**에 의존합니다.  
+운영체제별로 아래 명령어를 먼저 실행한 후, `poetry install`을 진행하세요.
+
+| 운영체제 | 설치 명령어 |
+|-----------|--------------|
+| **macOS (Apple Silicon 포함)** | `brew install portaudio` |
+| **Windows** | `pip install pipwin && pipwin install pyaudio` |
+| **Linux (Ubuntu 등)** | `sudo apt install portaudio19-dev` |
+
+> 💡 위 명령어는 **최초 1회만 실행**하면 됩니다.  
+> 이미 PortAudio가 설치되어 있다면 생략 가능합니다.
+
 ### 2.1. Python 의존성 설치
 ```bash
 # poetry가 설치되어 있지 않다면 먼저 설치해야 합니다.
@@ -27,19 +41,23 @@ npm install
 cd ..
 ```
 
-### 2.3. 데이터베이스 설정 및 데이터 로드
+### 2.3. 데이터베이스 및 벡터 인덱스 생성
+
+`data/storage/raw_data` 디렉토리에 레시피 원본 JSON 파일들이 준비되어 있어야 합니다.
+데이터베이스 스키마 생성, 데이터 삽입, 벡터 인덱스 생성을 위해 아래 스크립트들을 순서대로 실행합니다.
+
 ```bash
-# 가상환경에 진입합니다.
-poetry shell
+# 1. DB 스키마 생성
+poetry run python data/app/ingest/db_init.py
 
-# (가상환경 안에서) Django 데이터베이스를 생성합니다.
-python backend/manage.py migrate
+# 2. DB에 레시피 데이터 삽입
+poetry run python data/app/ingest/db_bulk_seed.py
 
-# (가상환경 안에서) 초기 레시피 데이터를 로드합니다.
-python backend/manage.py load_recipes data/recipes/all_recipes.ndjson
+# 3. FAISS 벡터 인덱스 생성
+poetry run python data/app/ingest/build_faiss.py
 
-# (가상환경 안에서) 빠져나옵니다.
-exit
+# 4. migration
+poetry run python backend/manage.py migrate
 ```
 
 ## 3. 서버 실행

@@ -86,13 +86,19 @@ TEMPLATES = [
 WSGI_APPLICATION = "core.wsgi.application"
 
 
+import yaml
+
+# config.yaml 파일 로드
+with open(BASE_DIR / "config.yaml", "r", encoding="utf-8") as f:
+    config = yaml.safe_load(f)
+
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "backend" / "db.sqlite3",
+        "NAME": BASE_DIR / config["paths"]["sqlite_path"],
     }
 }
 
