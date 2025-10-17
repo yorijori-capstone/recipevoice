@@ -9,5 +9,12 @@ faiss:
 paths:
   raw_data_dir: ./data/storage/raw_data
   preprocessed_dir: ./data/storage/preprocessed_data
-  sqlite_path: ./data/storage/database/recipes.db
   faiss_index_path: ./data/storage/vectorstore/chunks.index
+database:
+  engine: postgres
+  host: 127.0.0.1
+  port: 5432
+  name: recipevoice
+  user: recipevoice
+  password: recipevoice
+  options: {}
