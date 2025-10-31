@@ -72,9 +72,9 @@ poetry run python backend/manage.py migrate
 ### 3.1. 터미널 1: Django 백엔드 서버
 ```bash
 # recipevoice 루트 디렉토리에서 실행
-poetry run python backend/manage.py runserver
+poetry run python backend/manage.py runserver 0.0.0.0:8011
 ```
-> Django 백엔드 서버는 `http://127.0.0.1:8000`에서 실행됩니다.
+> Django 백엔드 서버는 `http://127.0.0.1:8011`에서 실행됩니다.
 
 ### 3.2. 터미널 2: LLM 플래닝 서버
 ```bash
@@ -100,7 +100,7 @@ npm run dev
 Django 대신 FastAPI 서버를 사용하려면:
 
 ```bash
-poetry run uvicorn dbserver.app.main:app --reload --port 8000
+poetry run uvicorn dbserver.app.main:app --reload --port 8010
 ```
 
 ### 스모크 테스트
