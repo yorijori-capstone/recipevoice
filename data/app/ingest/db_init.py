@@ -122,6 +122,24 @@ CREATE TABLE IF NOT EXISTS chunk_embedding_meta (
   faiss_vector_id INTEGER NOT NULL,
   UNIQUE(faiss_vector_id)   -- 1:1 매핑 보장
 );
+
+-- ==============================
+-- store_recommendations: 재료 기반 매장 추천
+-- ==============================
+CREATE TABLE IF NOT EXISTS store_recommendations (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  recipe_id     TEXT NOT NULL REFERENCES recipe(recipe_id) ON DELETE CASCADE,
+  ingredient    TEXT NOT NULL,
+  store_name    TEXT NOT NULL,
+  address       TEXT,
+  lat           REAL,
+  lon           REAL,
+  search_keyword TEXT,
+  search_date   TEXT DEFAULT (datetime('now','localtime'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_store_recommendations_recipe 
+ON store_recommendations(recipe_id, ingredient);
 """
 
 # 6. DB 초기화

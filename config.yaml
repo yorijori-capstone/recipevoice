@@ -6,6 +6,9 @@ faiss:
   index_type: flat_ip
   top_k: 8
   score_threshold: 0.7
+kakao_api:
+  rest_api_key: a264150f61895f744f9bfe4f8782140c
+  search_limit: 5
 paths:
   raw_data_dir: ./data/storage/raw_data
   preprocessed_dir: ./data/storage/preprocessed_data
