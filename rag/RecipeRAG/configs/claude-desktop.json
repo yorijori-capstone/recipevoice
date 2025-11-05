@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "reciperag": {
+      "command": "npx",
+      "args": ["-y", "RecipeRAG"],
+      "env": {
+      }
+    }
+  }
+}

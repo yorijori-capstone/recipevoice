@@ -15,8 +15,8 @@ class Config:
     HOST = os.getenv("PLANNING_SERVER_HOST", "0.0.0.0")
     PORT = int(os.getenv("PLANNING_SERVER_PORT", "8001"))
     
-    # RAG 서버 URL
-    RAG_SERVER_URL = os.getenv("RAG_SERVER_URL", "http://127.0.0.1:8000")
+    # RAG 서버 URL (dbserver FastAPI 기본 포트: 8010)
+    RAG_SERVER_URL = os.getenv("RAG_SERVER_URL", "http://127.0.0.1:8010")
     
     # LLM 설정 (Gemini)
     LLM_MODEL = "gemini-2.5-flash"

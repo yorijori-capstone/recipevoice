@@ -1,0 +1,6 @@
+Raycast AI — MCP server setup
+
+Use "Install MCP Server" and set:
+- Command: npx
+- Args: -y RecipeRAG
+- Env:

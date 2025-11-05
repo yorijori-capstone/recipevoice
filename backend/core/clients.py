@@ -7,7 +7,7 @@ from typing import Dict, Any
 from pathlib import Path
 from voice.tts_service import generate_tts_audio
 from voice.stt_service import recognize_speech_from_audio
-from rag.retriever import search_rag  # RAG 모듈에서 검색 함수를 직접 import
+from rag.search import search_rag  # RAG 모듈에서 검색 함수를 직접 import
 
 # --- Exception Class ---
 class APIClientError(Exception):
@@ -92,6 +92,6 @@ def generate_speech(text: str) -> bytes:
         header = b'RIFF' + (36).to_bytes(4, 'little') + b'WAVEfmt ' + (16).to_bytes(4, 'little') + (1).to_bytes(2, 'little') + (1).to_bytes(2, 'little') + samplerate.to_bytes(4, 'little') + (samplerate * 2).to_bytes(4, 'little') + (2).to_bytes(2, 'little') + (16).to_bytes(2, 'little') + b'data' + (int(samplerate*duration)*2).to_bytes(4, 'little')
         return header + (b'\x00' * int(samplerate*duration)*2)
 
-# RAG search_rag 함수는 이제 rag.retriever 모듈에서 직접 import하여 사용합니다.
+# RAG search_rag 함수는 이제 rag.search 모듈에서 직접 import하여 사용합니다.
 # Django의 views.py에서는 `from core import clients`를 통해 `clients.search_rag`를 호출하는데,
-# 이 `clients.py`가 `rag.retriever`의 `search_rag`를 import하므로 최종적으로 연결됩니다.
+# 이 `clients.py`가 `rag.search`의 `search_rag`를 import하므로 최종적으로 연결됩니다.

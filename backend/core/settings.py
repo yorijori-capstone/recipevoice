@@ -86,21 +86,31 @@ TEMPLATES = [
 WSGI_APPLICATION = "core.wsgi.application"
 
 
-import yaml
+from urllib.parse import urlparse
 
 # config.yaml 파일 로드
-with open(BASE_DIR / "config.yaml", "r", encoding="utf-8") as f:
-    config = yaml.safe_load(f)
+from data.app.config_loader import load_config
+
+config = load_config(BASE_DIR / "config.yaml")
 
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
+db_cfg = config.get("database")
+if not db_cfg:
+    raise RuntimeError("database configuration missing in config.yaml")
 
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / config["paths"]["sqlite_path"],
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.getenv("DB_NAME", db_cfg.get("name")),
+        "USER": os.getenv("DB_USER", db_cfg.get("user")),
+        "PASSWORD": os.getenv("DB_PASSWORD", db_cfg.get("password")),
+        "HOST": os.getenv("DB_HOST", db_cfg.get("host", "127.0.0.1")),
+        "PORT": os.getenv("DB_PORT", str(db_cfg.get("port", 5432))),
+        "OPTIONS": db_cfg.get("options", {}),
     }
 }
+CONN_MAX_AGE = int(os.getenv("DJANGO_DB_CONN_MAX_AGE", "60"))
 
 
 # Password validation
