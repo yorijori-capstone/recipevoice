@@ -9,7 +9,6 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 import faiss
 import psycopg
 from psycopg.rows import dict_row
-import yaml
 
 import sys
 
@@ -18,11 +17,11 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from data.app.emb_local import LocalEmbedder
+from data.app.config_loader import load_config
 
 
 try:
-    with (ROOT_DIR / "config.yaml").open("r", encoding="utf-8") as f:
-        CFG = yaml.safe_load(f)
+    CFG = load_config(ROOT_DIR / "config.yaml")
 
     DB_CFG = CFG.get("database") or {}
     if not DB_CFG:

@@ -94,7 +94,7 @@ npm run dev
 > 프론트엔드 애플리케이션은 `http://localhost:5173`에서 접속할 수 있습니다.
 
 ### 3.4. 터미널 4: DB 서비스 (선택)
-다른 애플리케이션이 SQLite 스키마를 직접 읽지 않아도 기본 정보를 조회할 수 있도록 
+다른 애플리케이션이 PostgreSQL 백엔드에 직접 접근하지 않아도 기본 정보를 조회할 수 있도록 
 경량 FastAPI 기반 DB 서비스(`dbserver`)를 제공합니다.
 
 ```bash
@@ -102,9 +102,9 @@ poetry run python -m dbserver.main --host 127.0.0.1 --port 8030
 ```
 
 주요 엔드포인트는 다음과 같습니다.
-- `GET /health` : SQLite 파일 경로 및 상태 확인
+- `GET /health` : PostgreSQL 연결 및 FAISS 인덱스 상태 확인
 - `GET /recipes` : 제목/ID 검색 및 페이징 지원 목록 조회 (`q`, `limit`, `offset`)
-- `GET /recipes/{recipe_id}` : 레시피 + 단계 + chunk 전체 데이터 반환
+- `GET /recipes/{recipe_id}` : 레시피 + 단계 + chunk 전체 데이터 반환 (문자열 `recipe_id`)
 
 > RAG 관련 MCP 도구 프로젝트는 `rag/RecipeRAG` 폴더에 위치합니다.
 
@@ -123,9 +123,9 @@ poetry run uvicorn dbserver.app.main:app --reload --port 8010
 ### 스모크 테스트
 
 ```bash
-curl http://127.0.0.1:8000/health
-curl "http://127.0.0.1:8000/search?query=된장찌개&k=3"
-curl http://127.0.0.1:8000/recipes/6873683
+curl http://127.0.0.1:8010/health
+curl "http://127.0.0.1:8010/search?query=된장찌개&k=3"
+curl http://127.0.0.1:8010/recipes/6873683
 # (플랜 기능은 다른 파트에서 담당하므로 제외)
-curl -X POST http://127.0.0.1:8000/step/next -H "Content-Type: application/json" -d '{"recipe_id":6873683,"current":1,"context":"미역 불림 완료"}'
+curl -X POST http://127.0.0.1:8010/step/next -H "Content-Type: application/json" -d '{"recipe_id":"6873683","current":1,"context":"미역 불림 완료"}'
 ```

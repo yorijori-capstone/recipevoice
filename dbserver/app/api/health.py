@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from fastapi import APIRouter
 
-from ..core.deps import get_faiss_index, get_sqlite
+from ..core.deps import get_faiss_index, pg_conn
 from ..schemas.common import HealthResponse
 
 router = APIRouter()
@@ -19,9 +19,10 @@ def health():
     # Check DB
     db_ok = True
     try:
-        conn = get_sqlite()
-        conn.execute("SELECT 1")
-    except Exception:
+        with pg_conn() as conn, conn.cursor() as cur:
+            cur.execute("SELECT 1")
+    except Exception as exc:
+        logger.exception("DB health check failed: %s", exc)
         db_ok = False
 
     return HealthResponse(status="ok", faiss_ntotal=ntotal, db_ok=db_ok)

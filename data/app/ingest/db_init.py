@@ -7,15 +7,15 @@ import textwrap
 from pathlib import Path
 
 import psycopg
-import yaml
+
+from data.app.config_loader import load_config
 
 ROOT = Path(__file__).resolve().parents[3]
 CFG_PATH = ROOT / "config.yaml"
 
 
 def _load_config() -> dict:
-    with CFG_PATH.open("r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+    return load_config(CFG_PATH)
 
 
 def _connect(db_cfg: dict) -> psycopg.Connection:

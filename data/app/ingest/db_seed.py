@@ -7,7 +7,7 @@ import os
 import uuid
 from pathlib import Path
 
-import yaml
+from data.app.config_loader import load_config
 
 from data.app.ingest._upsert_utils import (
     get_conn,
@@ -25,8 +25,7 @@ def _gen_id(prefix: str) -> str:
 def main(json_filename: str = "recipe_6873683.json") -> None:
     root = Path(__file__).resolve().parents[2]
     cfg_path = root / "config.yaml"
-    with cfg_path.open("r", encoding="utf-8") as f:
-        cfg = yaml.safe_load(f)
+    cfg = load_config(cfg_path)
 
     raw_dir = root / cfg["paths"]["raw_data_dir"]
     json_file = raw_dir / json_filename

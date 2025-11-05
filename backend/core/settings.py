@@ -86,12 +86,12 @@ TEMPLATES = [
 WSGI_APPLICATION = "core.wsgi.application"
 
 
-import yaml
 from urllib.parse import urlparse
 
 # config.yaml 파일 로드
-with open(BASE_DIR / "config.yaml", "r", encoding="utf-8") as f:
-    config = yaml.safe_load(f)
+from data.app.config_loader import load_config
+
+config = load_config(BASE_DIR / "config.yaml")
 
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases

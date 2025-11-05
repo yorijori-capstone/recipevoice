@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Body, HTTPException
 
-from ..core.deps import sqlite_conn
-from ..db.sqlite import get_recipe_steps
+from ..core.deps import pg_conn
+from ..db.postgres import get_recipe_steps
 from ..services.stepper import next_step
 
 
@@ -13,10 +13,17 @@ router = APIRouter()
 @router.post("/step/next")
 def step_next(payload: dict = Body(...)):
     try:
-        recipe_id = int(payload.get("recipe_id"))
-        current = int(payload.get("current", 0))
-        with sqlite_conn() as conn:
-            steps = get_recipe_steps(conn, recipe_id)
+        recipe_id = payload.get("recipe_id")
+        if not recipe_id:
+            raise HTTPException(status_code=400, detail="recipe_id가 필요합니다")
+        current_raw = payload.get("current", 0)
+        try:
+            current = int(current_raw)
+        except Exception:
+            current = 0
+
+        with pg_conn() as conn:
+            steps = get_recipe_steps(conn, str(recipe_id))
         result = next_step(current, total_steps=len(steps))
         next_no = result["next_no"]
         instruction = None

@@ -23,13 +23,17 @@ packages = [
 # ==========================================
 [tool.poetry.dependencies]
 # Python 버전 명시 (팀 환경: 3.10 기준)
-python = "~3.10"
+python = "^3.10"
 
 # ---- FastAPI 웹 프레임워크 관련 ----
 fastapi = "^0.115.0"
 uvicorn = { extras = ["standard"], version = "^0.30.0" }
 pydantic = "^2.9.0"
 pydantic-settings = "^2.2.0"
+
+# ---- Django 웹 프레임워크 관련 ----
+django = "^4.2"
+djangorestframework = "^3.15"
 
 # ---- HTTP 요청 및 API 통신 ----
 requests = "^2.31.0"

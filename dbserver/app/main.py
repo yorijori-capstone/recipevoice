@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .core.logging import setup_logging
-from .core.deps import get_faiss_index, get_sqlite, get_settings
+from .core.deps import get_faiss_index, get_settings, pg_conn
 from .api.health import router as health_router
 from .api.search import router as search_router
 from .api.recipes import router as recipes_router
@@ -30,12 +30,12 @@ app.add_middleware(
 @app.on_event("startup")
 def on_startup():
     settings = get_settings()
-    logger.info("settings.sqlite_path=%s", settings.sqlite_path)
-    logger.info("settings.faiss_index_path=%s", settings.faiss_index_path)
+    logger.info("database: %s", settings.db_info)
+    logger.info("faiss_index_path=%s", settings.faiss_index_path)
 
     # Preload resources
-    conn = get_sqlite()
-    conn.execute("SELECT 1")
+    with pg_conn() as conn, conn.cursor() as cur:
+        cur.execute("SELECT 1")
     index = get_faiss_index()
     logger.info("faiss.ntotal=%s", index.ntotal)
 

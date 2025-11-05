@@ -10,15 +10,14 @@ from pathlib import Path
 import faiss
 import numpy as np
 import psycopg
-import yaml
 
 from data.app.emb_local import LocalEmbedder
+from data.app.config_loader import load_config
 
 ROOT = Path(__file__).resolve().parents[3]
 CFG_PATH = ROOT / "config.yaml"
 
-with CFG_PATH.open("r", encoding="utf-8") as f:
-    CFG = yaml.safe_load(f)
+CFG = load_config(CFG_PATH)
 
 DB_CFG = CFG.get("database")
 if not DB_CFG:

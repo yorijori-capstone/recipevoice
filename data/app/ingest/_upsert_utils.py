@@ -9,13 +9,13 @@ from typing import Any, Dict, Optional
 
 import psycopg
 from psycopg.rows import dict_row
-import yaml
+
+from data.app.config_loader import load_config
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../"))
 CFG_PATH = os.path.join(ROOT, "config.yaml")
 
-with open(CFG_PATH, "r", encoding="utf-8") as f:
-    CFG = yaml.safe_load(f)
+CFG = load_config(CFG_PATH)
 
 DB_CFG = CFG.get("database")
 if not DB_CFG:

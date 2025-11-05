@@ -9,7 +9,7 @@ class SearchHit(BaseModel):
     chunk_id: str
     text: str
     score: float
-    recipe_id: int | None = None
+    recipe_id: str | None = None
     step_no: int | None = None
 
 

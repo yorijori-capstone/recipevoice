@@ -1,10 +1,10 @@
 """Quick inspection of PostgreSQL tables for debugging."""
 
 import psycopg
-import yaml
 
-with open("config.yaml", "r", encoding="utf-8") as f:
-    CFG = yaml.safe_load(f)
+from data.app.config_loader import load_config
+
+CFG = load_config("config.yaml")
 
 DB_CFG = CFG.get("database")
 if not DB_CFG:

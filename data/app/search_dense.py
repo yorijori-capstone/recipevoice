@@ -1,15 +1,20 @@
-import os, sys, re, yaml, faiss, numpy as np
+import os
+import re
+import sys
+
+import faiss
 import psycopg
 from psycopg.rows import dict_row
 from emb_local import LocalEmbedder
+
+from data.app.config_loader import load_config
 
 # 로그 줄이기
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
 
-with open("config.yaml","r",encoding="utf-8") as f:
-    CFG = yaml.safe_load(f)
+CFG = load_config("config.yaml")
 
 DB_CFG     = CFG.get("database")
 INDEX_PATH = CFG["paths"]["faiss_index_path"]

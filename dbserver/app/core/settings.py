@@ -1,76 +1,79 @@
+# dbserver/app/core/settings.py
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict
 
-import yaml
-from pydantic import Field, ValidationError
-from pydantic_settings import BaseSettings
+from data.app.config_loader import load_config
 
 
-class AppSettings(BaseSettings):
-    # Defaults match requested fixed paths
-    sqlite_path: str = Field(default="data/storage/database/recipes.db")
-    faiss_index_path: str = Field(default="data/storage/vectorstore/chunks.index")
-    top_k: int = 5
-    embed_model: str = (
-        "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
-    )
-
-    class Config:
-        env_prefix = "RECIPEVOICE_"
+@dataclass(frozen=True)
+class AppSettings:
+    faiss_index_path: Path
+    embed_model: str
+    top_k: int
+    conn_args: Dict[str, Any]
+    db_info: Dict[str, Any]
 
 
-def _load_yaml_config() -> Dict[str, Any]:
-    # Primary: configs/config.yaml, Fallback: config.yaml at repo root
+def load_settings() -> AppSettings:
+    """Load project settings from config.yaml with PostgreSQL connection info."""
     candidates = [
         Path("configs/config.yaml"),
         Path("config.yaml"),
     ]
+    cfg = None
+    cfg_path = None
     for path in candidates:
         if path.exists():
-            with path.open("r", encoding="utf-8") as f:
-                data = yaml.safe_load(f) or {}
-                return data
-    return {}
+            cfg = load_config(path)
+            cfg_path = path.resolve()
+            break
+    if cfg is None or cfg_path is None:
+        raise FileNotFoundError("config.yaml not found. Checked configs/config.yaml and config.yaml")
 
+    root = cfg_path.parent
+    paths_cfg = cfg.get("paths", {}) or {}
+    embedding_cfg = cfg.get("embedding", {}) or {}
+    faiss_cfg = cfg.get("faiss", {}) or {}
+    db_cfg = cfg.get("database") or {}
+    if not db_cfg:
+        raise RuntimeError("database configuration missing in config.yaml")
 
-def _flatten_from_nested(raw: Dict[str, Any]) -> Dict[str, Any]:
-    # Expecting structure:
-    # paths.sqlite_path, paths.faiss_index_path
-    # rag.top_k, rag.embed_model
-    flattened: Dict[str, Any] = {}
-    paths = (raw or {}).get("paths", {}) or {}
-    rag = (raw or {}).get("rag", {}) or {}
-    if "sqlite_path" in paths:
-        flattened["sqlite_path"] = paths["sqlite_path"]
-    if "faiss_index_path" in paths:
-        flattened["faiss_index_path"] = paths["faiss_index_path"]
-    if "top_k" in rag:
-        flattened["top_k"] = rag["top_k"]
-    if "embed_model" in rag:
-        flattened["embed_model"] = rag["embed_model"]
-    return flattened
-
-
-def load_settings() -> AppSettings:
-    raw = _load_yaml_config()
-    merged = _flatten_from_nested(raw)
-    try:
-        settings = AppSettings(**merged)
-    except ValidationError as e:
-        raise RuntimeError(f"Invalid settings: {e}")
-
-    # Validate critical paths exist on startup
-    sqlite_path = Path(settings.sqlite_path)
-    faiss_path = Path(settings.faiss_index_path)
-
-    if not sqlite_path.exists():
-        raise FileNotFoundError(
-            f"SQLite database not found at '{sqlite_path}'. Please check configs/config.yaml"
-        )
+    faiss_rel = paths_cfg.get("faiss_index_path", "data/storage/vectorstore/chunks.index")
+    faiss_path = (root / faiss_rel).resolve()
     if not faiss_path.exists():
         raise FileNotFoundError(
-            f"FAISS index not found at '{faiss_path}'. Please check configs/config.yaml"
+            f"FAISS index not found at '{faiss_path}'. "
+            "재생성하려면 `python -m data.app.ingest.build_faiss`를 실행하세요."
         )
-    return settings
+
+    embed_model = embedding_cfg.get(
+        "model", "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    )
+    top_k = int(faiss_cfg.get("top_k", 5))
+
+    conn_args: Dict[str, Any] = {
+        "dbname": db_cfg.get("name"),
+        "user": db_cfg.get("user"),
+        "password": db_cfg.get("password"),
+        "host": db_cfg.get("host", "127.0.0.1"),
+        "port": db_cfg.get("port", 5432),
+    }
+    conn_args.update(db_cfg.get("options") or {})
+
+    db_info = {
+        "name": db_cfg.get("name"),
+        "user": db_cfg.get("user"),
+        "host": db_cfg.get("host", "127.0.0.1"),
+        "port": db_cfg.get("port", 5432),
+    }
+
+    return AppSettings(
+        faiss_index_path=faiss_path,
+        embed_model=embed_model,
+        top_k=top_k,
+        conn_args=conn_args,
+        db_info=db_info,
+    )

@@ -8,13 +8,13 @@ from typing import Any, Dict, List, Optional
 
 import psycopg
 from psycopg.rows import dict_row
-import yaml
 from fastapi import FastAPI, HTTPException, Query
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-with (BASE_DIR / "config.yaml").open("r", encoding="utf-8") as f:
-    CFG = yaml.safe_load(f)
+from data.app.config_loader import load_config
+
+CFG = load_config(BASE_DIR / "config.yaml")
 
 DB_CFG = CFG.get("database")
 if not DB_CFG:

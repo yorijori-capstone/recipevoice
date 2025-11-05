@@ -27,7 +27,7 @@ python app.py serve
 # then open http://127.0.0.1:8000/health
 ```
 
-> Drop your prebuilt index files into `backend/index/`: `chunks.sqlite`, `vec.index`, `vec_meta.json`.
+> Drop your prebuilt index files into `backend/index/`: `chunks.index`, `vec.index`, `vec_meta.json`.
 
 ## 2) `UnityRAG/` — MCP server (TypeScript, mcp-framework)
 **Purpose:** Exposes tools and curated resources to AI assistants via **MCP**.  

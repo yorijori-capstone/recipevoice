@@ -1,38 +1,27 @@
+# dbserver/app/core/deps.py
 from __future__ import annotations
 
 import logging
-import sqlite3
 from contextlib import contextmanager
 from typing import Generator, Optional
 
 import faiss  # type: ignore
+import psycopg
+from psycopg.rows import dict_row
 
-from .settings import load_settings
+from .settings import AppSettings, load_settings
 
 logger = logging.getLogger(__name__)
 
-
-_SQLITE_CONN: Optional[sqlite3.Connection] = None
+_SETTINGS: Optional[AppSettings] = None
 _FAISS_INDEX: Optional[faiss.Index] = None
-_SETTINGS = None
 
 
-def get_settings():
+def get_settings() -> AppSettings:
     global _SETTINGS
     if _SETTINGS is None:
         _SETTINGS = load_settings()
     return _SETTINGS
-
-
-def get_sqlite() -> sqlite3.Connection:
-    global _SQLITE_CONN
-    if _SQLITE_CONN is None:
-        settings = get_settings()
-        try:
-            _SQLITE_CONN = sqlite3.connect(settings.sqlite_path, check_same_thread=False)
-        except Exception as e:
-            raise RuntimeError(f"Failed to open sqlite at {settings.sqlite_path}: {e}")
-    return _SQLITE_CONN
 
 
 def get_faiss_index() -> faiss.Index:
@@ -40,20 +29,20 @@ def get_faiss_index() -> faiss.Index:
     if _FAISS_INDEX is None:
         settings = get_settings()
         try:
-            _FAISS_INDEX = faiss.read_index(settings.faiss_index_path)  # type: ignore
+            _FAISS_INDEX = faiss.read_index(str(settings.faiss_index_path))  # type: ignore
             logger.info("Loaded FAISS index: ntotal=%s", _FAISS_INDEX.ntotal)
-        except Exception as e:
+        except Exception as exc:
             raise RuntimeError(
-                f"Failed to read FAISS index at {settings.faiss_index_path}: {e}"
+                f"Failed to read FAISS index at {settings.faiss_index_path}: {exc}"
             )
     return _FAISS_INDEX
 
 
 @contextmanager
-def sqlite_conn() -> Generator[sqlite3.Connection, None, None]:
-    conn = get_sqlite()
+def pg_conn() -> Generator[psycopg.Connection, None, None]:
+    settings = get_settings()
+    conn = psycopg.connect(row_factory=dict_row, **settings.conn_args)
     try:
         yield conn
     finally:
-        # Keep singleton connection alive; no close here
-        pass
+        conn.close()
