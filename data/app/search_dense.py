@@ -1,4 +1,6 @@
-import os, sys, re, sqlite3, yaml, faiss, numpy as np
+import os, sys, re, yaml, faiss, numpy as np
+import psycopg
+from psycopg.rows import dict_row
 from emb_local import LocalEmbedder
 
 # 로그 줄이기
@@ -9,10 +11,22 @@ os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
 with open("config.yaml","r",encoding="utf-8") as f:
     CFG = yaml.safe_load(f)
 
-DB_PATH    = CFG["paths"]["sqlite_path"]
+DB_CFG     = CFG.get("database")
 INDEX_PATH = CFG["paths"]["faiss_index_path"]
 MODEL_NAME = CFG["embedding"]["model"]
 TOP_K      = CFG["faiss"]["top_k"]
+
+if not DB_CFG:
+    raise RuntimeError("database configuration missing in config.yaml")
+
+CONN_ARGS = {
+    "dbname": DB_CFG.get("name"),
+    "user": DB_CFG.get("user"),
+    "password": DB_CFG.get("password"),
+    "host": DB_CFG.get("host", "127.0.0.1"),
+    "port": DB_CFG.get("port", 5432),
+}
+CONN_ARGS.update(DB_CFG.get("options") or {})
 
 # 1) 쿼리 확보 (명령행 인자 > 인터랙티브 입력)
 query = " ".join(sys.argv[1:]).strip() if len(sys.argv) > 1 else ""
@@ -39,21 +53,22 @@ sims, ids = index.search(qv, TOP_CAND)
 ids, sims = ids[0].tolist(), sims[0].tolist()
 
 # 5) 후보 청크 메타 불러오기
-conn = sqlite3.connect(DB_PATH); conn.row_factory = sqlite3.Row
 rows = []
 if ids:
-    placeholders = ",".join(["?"]*len(ids))
-    rows = conn.execute(
-        f"""
-        SELECT m.faiss_vector_id, c.chunk_id, c.text, s.step_no, r.recipe_id, r.title
-        FROM chunk_embedding_meta m
-        JOIN chunk c ON c.chunk_id = m.chunk_id
-        LEFT JOIN step s ON s.step_id = c.step_id
-        LEFT JOIN recipe r ON r.recipe_id = c.recipe_id
-        WHERE m.faiss_vector_id IN ({placeholders})
-        """, tuple(ids)
-    ).fetchall()
-conn.close()
+    with psycopg.connect(row_factory=dict_row, **CONN_ARGS) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT m.faiss_vector_id, c.chunk_id, c.text, s.step_no, r.recipe_id, r.title
+                FROM chunk_embedding_meta m
+                JOIN chunk c ON c.chunk_id = m.chunk_id
+                LEFT JOIN step s ON s.step_id = c.step_id
+                LEFT JOIN recipe r ON r.recipe_id = c.recipe_id
+                WHERE m.faiss_vector_id = ANY(%s)
+                """,
+                (ids,),
+            )
+            rows = cur.fetchall()
 
 # 6) 프리필터: 키워드가 있으면 타이틀/본문 LIKE 매칭 우선
 def matches_any(term_list, title, text):

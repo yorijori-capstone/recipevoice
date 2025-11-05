@@ -1,95 +1,101 @@
-import os, sqlite3, yaml, faiss, shutil, tempfile, numpy as np
+"""Build FAISS index from PostgreSQL chunk data."""
+
+from __future__ import annotations
+
+import os
+import shutil
+import tempfile
 from pathlib import Path
 
-# -------------------------
-# 0. 경로 계산 (루트 기준)
-# -------------------------
-ROOT = Path(__file__).resolve().parents[3]          # recipevoice/ (최상위)
+import faiss
+import numpy as np
+import psycopg
+import yaml
+
+from data.app.emb_local import LocalEmbedder
+
+ROOT = Path(__file__).resolve().parents[3]
 CFG_PATH = ROOT / "config.yaml"
 
-with open(CFG_PATH, "r", encoding="utf-8") as f:
+with CFG_PATH.open("r", encoding="utf-8") as f:
     CFG = yaml.safe_load(f)
 
-SQLITE_PATH = (ROOT / CFG["paths"]["sqlite_path"]).resolve()
-FAISS_PATH  = (ROOT / CFG["paths"]["faiss_index_path"]).resolve()
-MODEL_NAME  = CFG["embedding"]["model"]
-DIM         = int(CFG["embedding"]["dim"])
+DB_CFG = CFG.get("database")
+if not DB_CFG:
+    raise RuntimeError("database configuration missing in config.yaml")
 
-os.makedirs(os.path.dirname(FAISS_PATH), exist_ok=True)
+FAISS_PATH = (ROOT / CFG["paths"]["faiss_index_path"]).resolve()
+FAISS_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-# -------------------------
-# 1. 임베더 import 및 초기화
-# -------------------------
-# 절대경로 임포트
-from data.app.emb_local import LocalEmbedder
+MODEL_NAME = CFG["embedding"]["model"]
+DIM = int(CFG["embedding"]["dim"])
 
 embedder = LocalEmbedder(MODEL_NAME)
 
-# -------------------------
-# 2. DB 연결 및 chunk 로드
-# -------------------------
-conn = sqlite3.connect(SQLITE_PATH)
-conn.row_factory = sqlite3.Row
-
-rows = conn.execute("SELECT chunk_id, text FROM chunk ORDER BY rowid").fetchall()
-texts = [r["text"] for r in rows]
-chunk_ids = [r["chunk_id"] for r in rows]
-print(f"chunks: {len(texts)}")
-
-# -------------------------
-# 3. 임베딩 & FAISS 인덱스
-# -------------------------
-embs = embedder.encode(texts)  # shape (N, DIM)
-embs = np.array(embs).astype("float32")
-
-index = faiss.IndexFlatIP(DIM)     # inner product index
-index.add(embs)
+CONN_ARGS = {
+    "dbname": DB_CFG.get("name"),
+    "user": DB_CFG.get("user"),
+    "password": DB_CFG.get("password"),
+    "host": DB_CFG.get("host", "127.0.0.1"),
+    "port": DB_CFG.get("port", 5432),
+}
+CONN_ARGS.update(DB_CFG.get("options") or {})
 
 
-tmp_dir = tempfile.gettempdir()
-tmp_path = Path(tmp_dir) / "chunks.index"
-try:
-    # 1) 임시 위치에 기록 (영문 경로)
-    faiss.write_index(index, str(tmp_path))
-    print(f"[OK] faiss index temporarily written to: {tmp_path}")
+def fetch_chunks() -> tuple[list[str], list[str]]:
+    with psycopg.connect(**CONN_ARGS) as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT chunk_id, text FROM chunk ORDER BY chunk_id")
+            rows = cur.fetchall()
 
-    # 2) 최종 저장소 디렉터리 보장
-    FAISS_PATH = Path(FAISS_PATH)  # 혹시 문자열이면 Path로 보정
-    FAISS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        chunk_ids = [cid for cid, _ in rows]
+        texts = [txt or "" for _, txt in rows]
+        return chunk_ids, texts
 
-    # 3) 기존 파일이 있으면 교체
-    shutil.copy2(tmp_path, FAISS_PATH)
-    print(f"[OK] faiss index copied to: {FAISS_PATH}")
 
-finally:
-    # 4) 임시 파일 정리 (실패해도 무시)
+def write_embedding_meta(chunk_ids: list[str]) -> None:
+    with psycopg.connect(**CONN_ARGS) as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM chunk_embedding_meta")
+            for idx, chunk_id in enumerate(chunk_ids):
+                cur.execute(
+                    """
+                    INSERT INTO chunk_embedding_meta (chunk_id, model_name, dim, faiss_vector_id)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (chunk_id) DO UPDATE SET
+                        model_name = EXCLUDED.model_name,
+                        dim = EXCLUDED.dim,
+                        faiss_vector_id = EXCLUDED.faiss_vector_id
+                    """,
+                    (chunk_id, MODEL_NAME, DIM, idx),
+                )
+        conn.commit()
+
+
+def main() -> None:
+    chunk_ids, texts = fetch_chunks()
+    if not texts:
+        raise RuntimeError("No chunk data found. Run the ingest pipeline before building FAISS index.")
+
+    print(f"chunks: {len(texts)}")
+    embeddings = embedder.encode(texts)
+    embeddings = np.array(embeddings, dtype="float32")
+
+    index = faiss.IndexFlatIP(DIM)
+    index.add(embeddings)
+
+    tmp_path = Path(tempfile.gettempdir()) / "chunks.index"
     try:
+        faiss.write_index(index, str(tmp_path))
+        shutil.copy2(tmp_path, FAISS_PATH)
+        print(f"[OK] faiss index copied to: {FAISS_PATH}")
+    finally:
         if tmp_path.exists():
             tmp_path.unlink()
-    except Exception:
-        pass
 
-print("faiss ntotal:", index.ntotal)
-
+    write_embedding_meta(chunk_ids)
+    print("faiss ntotal:", index.ntotal)
 
 
-# -------------------------
-# 4. 메타 테이블 갱신
-# -------------------------
-# 테이블 구조 예시:
-# chunk_embedding_meta(chunk_id TEXT, model_name TEXT, dim INTEGER, faiss_vector_id INTEGER)
-conn.execute("DELETE FROM chunk_embedding_meta")
-
-for i, cid in enumerate(chunk_ids):
-    conn.execute(
-        """
-        INSERT INTO chunk_embedding_meta
-        (chunk_id, model_name, dim, faiss_vector_id)
-        VALUES (?, ?, ?, ?)
-        """,
-        (cid, MODEL_NAME, DIM, i)
-    )
-
-conn.commit()
-conn.close()
-print("chunk_embedding_meta written")
+if __name__ == "__main__":
+    main()

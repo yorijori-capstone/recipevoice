@@ -1,10 +1,18 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 import uvicorn
 from pydantic import BaseModel, Field
 from typing import Literal
+from datetime import datetime
 
-from .schemas import RecipeInput, PlanningOutput, PlannedStep
+from .schemas import (
+    RecipeInput, 
+    PlanningOutput, 
+    PlannedStep,
+    ErrorResponse,
+    RecipeNotFoundError
+)
 from .llm_client import LLMClient
 from .config import Config
 
@@ -29,6 +37,44 @@ app.add_middleware(
 
 # LLM 클라이언트 초기화 (Gemini)
 llm_client = LLMClient(api_key=Config.GEMINI_API_KEY)
+
+
+# ===== 커스텀 에러 핸들러 (신규 추가) =====
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request, exc):
+    """사용자 친화적 에러 메시지 반환"""
+    
+    error_messages = {
+        404: {
+            "error": "RECIPE_NOT_FOUND",
+            "message": "요청하신 레시피를 찾을 수 없습니다.",
+            "suggestion": "레시피 ID를 확인하거나, 레시피 이름으로 검색해보세요."
+        },
+        400: {
+            "error": "INVALID_RECIPE",
+            "message": "레시피 데이터가 올바르지 않습니다.",
+            "suggestion": "재료와 조리 단계가 포함된 레시피를 입력해주세요."
+        },
+        500: {
+            "error": "SERVER_ERROR",
+            "message": "서버에서 문제가 발생했습니다.",
+            "suggestion": "잠시 후 다시 시도해주세요. 문제가 지속되면 관리자에게 문의하세요."
+        }
+    }
+    
+    error_detail = error_messages.get(exc.status_code, {
+        "error": "UNKNOWN_ERROR",
+        "message": str(exc.detail),
+        "suggestion": "관리자에게 문의하세요."
+    })
+    
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            **error_detail,
+            "timestamp": datetime.now().isoformat()
+        }
+    )
 
 
 @app.get("/")
@@ -78,9 +124,60 @@ async def create_plan(recipe: RecipeInput):
             - closing_remark: 마무리 인사말
     
     Raises:
-        HTTPException: LLM 호출 실패 시
+        HTTPException: 
+            - 400: 잘못된 레시피 데이터 (재료/단계 없음)
+            - 404: 레시피를 찾을 수 없음
+            - 500: LLM 호출 실패
     """
     
+    # ===== 입력 검증 강화 (신규 추가) =====
+    
+    # 1. 조리 단계 검증
+    if not recipe.steps or len(recipe.steps) == 0:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "MISSING_STEPS",
+                "message": "조리 단계가 없습니다.",
+                "suggestion": "레시피에 최소 1개 이상의 조리 단계가 필요합니다."
+            }
+        )
+    
+    # 2. 재료 검증
+    if not recipe.ingredients or len(recipe.ingredients) == 0:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "MISSING_INGREDIENTS",
+                "message": "재료 정보가 없습니다.",
+                "suggestion": "레시피에 최소 1개 이상의 재료가 필요합니다."
+            }
+        )
+    
+    # 3. 제목 검증
+    if not recipe.title or recipe.title.strip() == "":
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "MISSING_TITLE",
+                "message": "레시피 제목이 없습니다.",
+                "suggestion": "레시피 제목을 입력해주세요."
+            }
+        )
+    
+    # 4. 조리 단계 내용 검증
+    for step in recipe.steps:
+        if not step.instruction or step.instruction.strip() == "":
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "EMPTY_STEP_INSTRUCTION",
+                    "message": f"{step.order}번 단계의 설명이 비어있습니다.",
+                    "suggestion": "모든 조리 단계에 설명이 필요합니다."
+                }
+            )
+    
+    # ===== LLM 호출 =====
     try:
         # LLM 호출하여 음성 안내 스크립트 생성
         plan_data = llm_client.generate_plan(
@@ -145,17 +242,7 @@ async def test_plan():
     return await create_plan(sample_recipe)
 
 
-# 서버 실행 함수
-def start_server():
-    """서버 시작 (개발용)"""
-    uvicorn.run(
-        "llm.planning_server.main:app",
-        host=Config.HOST,
-        port=Config.PORT,
-        reload=True  # 코드 변경 시 자동 재시작
-    )
-
-# ===== 예외 처리 엔드포인트 수정 =====
+# ===== 예외 처리 엔드포인트 =====
 
 class ControlRequest(BaseModel):
     """제어 명령 요청"""
@@ -170,6 +257,12 @@ class ChatRequest(BaseModel):
     """채팅 요청 모델"""
     input: str
     chat_history: str = ""
+
+class ChatRequest(BaseModel):
+    """채팅 요청 모델"""
+    input: str
+    chat_history: str = ""
+
 
 @app.post("/control")
 async def handle_control_command(request: ControlRequest):
@@ -212,6 +305,7 @@ async def handle_control_command(request: ControlRequest):
     
     return response
 
+
 @app.post("/chat")
 async def handle_chat(request: ChatRequest):
     """
@@ -231,6 +325,17 @@ async def handle_chat(request: ChatRequest):
             detail=f"채팅 처리 실패: {str(e)}"
         )
 
+
+# 서버 실행 함수
+def start_server():
+    """서버 시작 (개발용)"""
+    uvicorn.run(
+        "llm.planning_server.main:app",
+        host=Config.HOST,
+        port=Config.PORT,
+        reload=True  # 코드 변경 시 자동 재시작
+    )
+
+
 if __name__ == "__main__":
     start_server()
-
