@@ -127,6 +127,22 @@ DDL_STATEMENTS = [
     ),
     "DROP TRIGGER IF EXISTS chunk_search_vector_trigger ON chunk",
     "CREATE TRIGGER chunk_search_vector_trigger BEFORE INSERT OR UPDATE ON chunk FOR EACH ROW EXECUTE FUNCTION chunk_update_search_vector()",
+    textwrap.dedent(
+        """
+        CREATE TABLE IF NOT EXISTS store_recommendations (
+            id             BIGSERIAL PRIMARY KEY,
+            recipe_id      TEXT NOT NULL REFERENCES recipe(recipe_id) ON DELETE CASCADE,
+            ingredient     TEXT NOT NULL,
+            store_name     TEXT NOT NULL,
+            address        TEXT,
+            lat            DOUBLE PRECISION,
+            lon            DOUBLE PRECISION,
+            search_keyword TEXT,
+            search_date    TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    ),
+    "CREATE INDEX IF NOT EXISTS idx_store_recommendations_recipe ON store_recommendations (recipe_id, ingredient)",
 ]
 
 
