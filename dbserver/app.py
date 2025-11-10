@@ -1,6 +1,6 @@
 """Lightweight read-only API for PostgreSQL-backed recipe data."""
-
 from __future__ import annotations
+from rag.search import search_rag, search_rag_chunks
 
 import json
 from pathlib import Path
@@ -166,3 +166,18 @@ def get_recipe(recipe_id: str):
         "steps": steps_payload,
         "chunks": chunks_payload,
     }
+
+
+@app.get("/rag/chunks")
+def rag_chunks(q: str, top_k: int = 8):
+    """
+    FAISS + PostgreSQL 기반 chunk 단위 검색
+    """
+    return search_rag_chunks(q, top_k)
+
+@app.get("/rag/recipes")
+def rag_recipes(q: str, top_k: int = 8):
+    """
+    FAISS + PostgreSQL 기반 recipe 단위 검색
+    """
+    return {"recipes": search_rag(q, top_k)}

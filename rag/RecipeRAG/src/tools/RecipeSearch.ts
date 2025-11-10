@@ -1,16 +1,18 @@
-import { MCPTool } from "mcp-framework";
 import { z } from "zod";
 
-const BASE_URL = process.env.RECIPE_RAG_BASE_URL || "http://127.0.0.1:8000";
+const BASE_URL = process.env.RECIPE_RAG_BASE_URL || "http://127.0.0.1:8030";
 
 type Input = { q: string; top_k?: number };
 
-export default class RecipeSearch extends MCPTool<Input> {
+export default class RecipeSearch {
   name = "recipe_search";
   description = "Search local recipe dataset (ingredients + name)";
   schema = {
     q: { type: z.string(), description: "검색할 요리명 또는 재료명" },
-    top_k: { type: z.number().int().min(1).max(50).default(8), description: "검색 결과 개수" },
+    top_k: {
+      type: z.number().int().min(1).max(50).default(8),
+      description: "검색 결과 개수",
+    },
   };
 
   async execute(input: Input) {
@@ -26,6 +28,37 @@ export default class RecipeSearch extends MCPTool<Input> {
     return r.json();
   }
 }
+
+
+
+// import { MCPTool } from "mcp-framework";
+// import { z } from "zod";
+
+// const BASE_URL = process.env.RECIPE_RAG_BASE_URL || "http://127.0.0.1:8000";
+
+// type Input = { q: string; top_k?: number };
+
+// export default class RecipeSearch extends MCPTool<Input> {
+//   name = "recipe_search";
+//   description = "Search local recipe dataset (ingredients + name)";
+//   schema = {
+//     q: { type: z.string(), description: "검색할 요리명 또는 재료명" },
+//     top_k: { type: z.number().int().min(1).max(50).default(8), description: "검색 결과 개수" },
+//   };
+
+//   async execute(input: Input) {
+//     const u = new URL("/recipes/search/", BASE_URL);
+//     u.searchParams.set("q", input.q);
+//     if (input.top_k) {
+//       u.searchParams.set("top_k", String(input.top_k));
+//     }
+
+//     const r = await fetch(u.toString(), { method: "GET" });
+//     if (!r.ok) throw new Error(`/recipes/search failed (${r.status})`);
+
+//     return r.json();
+//   }
+// }
 
 
 // import { MCPTool } from "mcp-framework";
