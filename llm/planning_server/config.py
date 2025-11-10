@@ -1,7 +1,6 @@
 import os
 from dotenv import load_dotenv
 
-# .env 파일 로드
 load_dotenv()
 
 
@@ -13,10 +12,10 @@ class Config:
     
     # 서버 설정
     HOST = os.getenv("PLANNING_SERVER_HOST", "0.0.0.0")
-    PORT = int(os.getenv("PLANNING_SERVER_PORT", "8001"))
+    PORT = int(os.getenv("PLANNING_SERVER_PORT", "8100"))  # 8100으로 변경
     
-    # RAG 서버 URL (dbserver FastAPI 기본 포트: 8010)
-    RAG_SERVER_URL = os.getenv("RAG_SERVER_URL", "http://127.0.0.1:8010")
+    # RAG 서버 URL
+    RAG_SERVER_URL = os.getenv("RAG_SERVER_URL", "http://127.0.0.1:8030")
     
     # LLM 설정 (Gemini)
     LLM_MODEL = "gemini-2.5-flash"
@@ -26,9 +25,9 @@ class Config:
     @classmethod
     def validate(cls):
         """필수 설정 검증"""
-        if not cls.GEMINI_API_KEY:  # 이 부분도 수정
+        if not cls.GEMINI_API_KEY:
             raise ValueError(
-                "GEMINI_API_KEY가 설정되지 않았습니다. "  # 이 부분도 수정
+                "GEMINI_API_KEY가 설정되지 않았습니다. "
                 ".env 파일을 확인하세요."
             )
         
@@ -39,6 +38,5 @@ class Config:
         print(f"   - RAG 서버: {cls.RAG_SERVER_URL}")
 
 
-# 서버 시작 시 검증
 if __name__ == "__main__":
     Config.validate()

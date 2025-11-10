@@ -253,10 +253,6 @@ class ControlRequest(BaseModel):
     current_step_order: int = Field(..., description="현재 진행 중인 단계 번호")
     current_step: PlannedStep = Field(..., description="현재 단계 정보")
 
-class ChatRequest(BaseModel):
-    """채팅 요청 모델"""
-    input: str
-    chat_history: str = ""
 
 class ChatRequest(BaseModel):
     """채팅 요청 모델"""
