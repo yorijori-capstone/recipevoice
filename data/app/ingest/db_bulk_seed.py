@@ -137,6 +137,7 @@ def create_metadata_chunk(
     title: Optional[str],
     author: Optional[str],
     servings: Optional[str],
+    total_time: Optional[str],
     difficulty: Optional[str],
 ) -> None:
     """
@@ -148,6 +149,7 @@ def create_metadata_chunk(
         title: 레시피 제목
         author: 작성자
         servings: 인분
+        total_time: 조리 시간
         difficulty: 난이도
     """
     parts = []
@@ -157,6 +159,8 @@ def create_metadata_chunk(
         parts.append(f"작성자: {author}")
     if servings:
         parts.append(f"인분: {servings}")
+    if total_time:
+        parts.append(f"조리시간: {total_time}")
     if difficulty:
         parts.append(f"난이도: {difficulty}")
     
@@ -304,6 +308,7 @@ def main() -> None:
                     title=title,
                     author=author,
                     servings=servings,
+                    total_time=total_time,
                     difficulty=difficulty,
                 )
 
