@@ -1,17 +1,20 @@
-"""
-Planning 서버 호출 Tool
-"""
+"""Planning 서버 호출 Tool"""
 
+import json
+import os
+from typing import Type
+
+import requests
 from langchain.tools import BaseTool
 from pydantic import BaseModel, Field
-from typing import Type
-import requests
-import json
 
 
 class PlanningInput(BaseModel):
     """Planning Tool 입력"""
     recipe_json: str = Field(..., description="레시피 JSON (문자열)")
+
+
+DEFAULT_PLANNING_SERVER_URL = os.getenv("PLANNING_SERVER_URL", "http://localhost:8100")
 
 
 class PlanningTool(BaseTool):
@@ -26,7 +29,7 @@ class PlanningTool(BaseTool):
 """
     
     args_schema: Type[BaseModel] = PlanningInput
-    planning_server_url: str = "http://localhost:8000"
+    planning_server_url: str = DEFAULT_PLANNING_SERVER_URL
     
     def _run(self, recipe_json: str) -> str:
         """Planning 서버 호출"""

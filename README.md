@@ -83,7 +83,7 @@ poetry run python backend/manage.py runserver 0.0.0.0:8011
 # recipevoice 루트 디렉토리에서 실행
 poetry run python -m llm.planning_server.main
 ```
-> LLM 플래닝 서버는 `http://127.0.0.1:8001`에서 실행됩니다.
+> LLM 플래닝 서버는 `http://127.0.0.1:8100`에서 실행됩니다.
 
 ### 3.3. 터미널 3: 프론트엔드 개발 서버
 ```bash

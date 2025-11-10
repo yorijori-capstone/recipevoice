@@ -1,4 +1,5 @@
 # backend/core/clients.py
+import os
 import requests
 import base64
 from typing import Dict, Any
@@ -18,7 +19,7 @@ class APIClientError(Exception):
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 # --- LLM Planning Server (FastAPI) --- 
-LLM_SERVER_URL = "http://localhost:8001"
+LLM_SERVER_URL = os.getenv("PLANNING_SERVER_URL", "http://localhost:8100")
 
 def plan_recipe_for_voice(recipe_data: Dict[str, Any]) -> Dict[str, Any]:
     """
