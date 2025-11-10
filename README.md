@@ -9,6 +9,7 @@
 -   Python (3.10 이상)
 -   Poetry (Python 패키지 및 의존성 관리 도구)
 -   Node.js 및 npm (프론트엔드 개발 환경)
+-   PostgreSQL 13 이상 (서버/클라이언트 도구)
 
 ## 2. 초기 환경 설정
 
@@ -41,14 +42,20 @@ npm install
 cd ..
 ```
 
+⚠️ Python 버전은 3.10을 사용합니다:
+```bash
+poetry env use 3.10
+```
+
 ### 2.3. 데이터베이스 및 벡터 인덱스 생성
 
 `data/storage/raw_data` 디렉토리에 레시피 원본 JSON 파일들이 준비되어 있어야 합니다.
-데이터베이스 스키마 생성, 데이터 삽입, 벡터 인덱스 생성을 위해 아래 스크립트들을 순서대로 실행합니다.
+PostgreSQL에 데이터베이스와 계정을 생성하고(`createdb recipevoice`, `createuser recipevoice --pwprompt` 등) 
+`config.yaml`의 `database` 섹션을 실제 접속 정보로 수정한 뒤, 아래 명령을 순서대로 실행합니다.
 
 ```bash
 # 1. DB 스키마 생성
-poetry run python data/app/ingest/db_init.py
+poetry run python backend/manage.py init_recipe_db
 
 # 2. DB에 레시피 데이터 삽입
 poetry run python data/app/ingest/db_bulk_seed.py
@@ -56,7 +63,7 @@ poetry run python data/app/ingest/db_bulk_seed.py
 # 3. FAISS 벡터 인덱스 생성
 poetry run python data/app/ingest/build_faiss.py
 
-# 4. migration
+# 4. Django migration
 poetry run python backend/manage.py migrate
 ```
 
@@ -67,9 +74,9 @@ poetry run python backend/manage.py migrate
 ### 3.1. 터미널 1: Django 백엔드 서버
 ```bash
 # recipevoice 루트 디렉토리에서 실행
-poetry run python backend/manage.py runserver
+poetry run python backend/manage.py runserver 0.0.0.0:8011
 ```
-> Django 백엔드 서버는 `http://127.0.0.1:8000`에서 실행됩니다.
+> Django 백엔드 서버는 `http://127.0.0.1:8011`에서 실행됩니다.
 
 ### 3.2. 터미널 2: LLM 플래닝 서버
 ```bash
@@ -86,6 +93,39 @@ npm run dev
 ```
 > 프론트엔드 애플리케이션은 `http://localhost:5173`에서 접속할 수 있습니다.
 
+### 3.4. 터미널 4: DB 서비스 (선택)
+다른 애플리케이션이 PostgreSQL 백엔드에 직접 접근하지 않아도 기본 정보를 조회할 수 있도록 
+경량 FastAPI 기반 DB 서비스(`dbserver`)를 제공합니다.
+
+```bash
+poetry run python -m dbserver.main --host 127.0.0.1 --port 8030
+```
+
+주요 엔드포인트는 다음과 같습니다.
+- `GET /health` : PostgreSQL 연결 및 FAISS 인덱스 상태 확인
+- `GET /recipes` : 제목/ID 검색 및 페이징 지원 목록 조회 (`q`, `limit`, `offset`)
+- `GET /recipes/{recipe_id}` : 레시피 + 단계 + chunk 전체 데이터 반환 (문자열 `recipe_id`)
+
+> RAG 관련 MCP 도구 프로젝트는 `rag/RecipeRAG` 폴더에 위치합니다.
+
 ## 4. 사용법
 
 모든 서버가 실행되면 웹 브라우저에서 `http://localhost:5173`으로 접속하여 애플리케이션을 사용할 수 있습니다.
+
+## 5. FastAPI 서버 실행 (대안)
+
+Django 대신 FastAPI 서버를 사용하려면:
+
+```bash
+poetry run uvicorn dbserver.app.main:app --reload --port 8010
+```
+
+### 스모크 테스트
+
+```bash
+curl http://127.0.0.1:8010/health
+curl "http://127.0.0.1:8010/search?query=된장찌개&k=3"
+curl http://127.0.0.1:8010/recipes/6873683
+# (플랜 기능은 다른 파트에서 담당하므로 제외)
+curl -X POST http://127.0.0.1:8010/step/next -H "Content-Type: application/json" -d '{"recipe_id":"6873683","current":1,"context":"미역 불림 완료"}'
+```

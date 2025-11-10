@@ -28,8 +28,15 @@ class SearchView(APIView):
         query = request.query_params.get('q', None)
         if not query:
             return Response({"error": "'q' 쿼리 파라미터가 필요합니다."}, status=status.HTTP_400_BAD_REQUEST)
+        top_k_param = request.query_params.get('top_k')
+        top_k = None
+        if top_k_param:
+            try:
+                top_k = max(1, min(50, int(top_k_param)))
+            except ValueError:
+                return Response({"error": "'top_k'는 정수여야 합니다."}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            recipe_ids = clients.search_rag(query)
+            recipe_ids = clients.search_rag(query, top_k=top_k)
             if not recipe_ids:
                 return Response([], status=status.HTTP_200_OK)
             recipes = Recipe.objects.filter(recipe_id__in=recipe_ids)

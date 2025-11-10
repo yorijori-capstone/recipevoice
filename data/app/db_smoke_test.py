@@ -1,23 +1,34 @@
-import sqlite3, yaml
+"""Quick inspection of PostgreSQL tables for debugging."""
 
-with open("config.yaml", "r", encoding="utf-8") as f:
-    CFG = yaml.safe_load(f)
+import psycopg
 
-DB_PATH = CFG["paths"]["sqlite_path"]
+from data.app.config_loader import load_config
 
-conn = sqlite3.connect(DB_PATH)
-conn.row_factory = sqlite3.Row
+CFG = load_config("config.yaml")
 
-print("[recipes]")
-for r in conn.execute("SELECT recipe_id, title, source, total_time FROM recipe"):
-    print(dict(r))
+DB_CFG = CFG.get("database")
+if not DB_CFG:
+    raise RuntimeError("database configuration missing in config.yaml")
 
-print("\n[steps]")
-for r in conn.execute("SELECT step_id, recipe_id, step_no, text FROM step ORDER BY step_no"):
-    print(dict(r))
+with psycopg.connect(
+    dbname=DB_CFG.get("name"),
+    user=DB_CFG.get("user"),
+    password=DB_CFG.get("password"),
+    host=DB_CFG.get("host", "127.0.0.1"),
+    port=DB_CFG.get("port", 5432),
+) as conn:
+    with conn.cursor() as cur:
+        print("[recipes]")
+        cur.execute("SELECT recipe_id, title, source, total_time FROM recipe")
+        for row in cur.fetchall():
+            print(row)
 
-print("\n[chunks]")
-for r in conn.execute("SELECT rowid, chunk_id, section, text FROM chunk"):
-    print(dict(r))
+        print("\n[steps]")
+        cur.execute("SELECT step_id, recipe_id, step_no, text FROM step ORDER BY recipe_id, step_no")
+        for row in cur.fetchall():
+            print(row)
 
-conn.close()
+        print("\n[chunks]")
+        cur.execute("SELECT chunk_id, recipe_id, section, text FROM chunk ORDER BY recipe_id, step_no")
+        for row in cur.fetchall():
+            print(row)
