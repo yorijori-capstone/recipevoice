@@ -129,6 +129,138 @@ def guess_source_from_url(url: Optional[str]) -> str:
 
 
 # ------------------------------------------------------------
+# 메타데이터 통합 청크 생성
+# ------------------------------------------------------------
+def create_metadata_chunk(
+    cur,
+    recipe_id: str,
+    title: Optional[str],
+    author: Optional[str],
+    servings: Optional[str],
+    total_time: Optional[str],
+    difficulty: Optional[str],
+) -> None:
+    """
+    레시피 메타데이터를 통합하여 하나의 chunk로 생성
+    
+    Args:
+        cur: DB 커서
+        recipe_id: 레시피 ID
+        title: 레시피 제목
+        author: 작성자
+        servings: 인분
+        total_time: 조리 시간
+        difficulty: 난이도
+    """
+    parts = []
+    if title:
+        parts.append(f"레시피: {title}")
+    if author:
+        parts.append(f"작성자: {author}")
+    if servings:
+        parts.append(f"인분: {servings}")
+    if total_time:
+        parts.append(f"조리시간: {total_time}")
+    if difficulty:
+        parts.append(f"난이도: {difficulty}")
+    
+    if not parts:
+        return  # 메타데이터가 없으면 청크 생성 안 함
+    
+    metadata_text = " | ".join(parts)
+    
+    upsert_chunk(
+        cur=cur,
+        chunk_id=None,
+        recipe_id=recipe_id,
+        step_id=None,
+        step_no=None,
+        section="metadata",
+        text=metadata_text,
+        meta_json=None,
+    )
+
+
+# ------------------------------------------------------------
+# 재료별 청크 생성
+# ------------------------------------------------------------
+def create_ingredient_chunks(
+    cur,
+    recipe_id: str,
+    obj: Dict[str, Any],
+) -> None:
+    """
+    recipe_doc.raw_json의 ingredients_struct에서 재료를 추출하여
+    각 재료별로 개별 chunk 생성
+    
+    Args:
+        cur: DB 커서
+        recipe_id: 레시피 ID
+        obj: 레시피 JSON 객체
+    """
+    # ingredients_struct 우선 사용
+    ingredients_struct = obj.get("ingredients_struct", [])
+    
+    if not ingredients_struct:
+        # fallback: ingredients 배열 사용
+        ingredients_list = obj.get("ingredients", [])
+        if isinstance(ingredients_list, list):
+            for ing in ingredients_list:
+                if isinstance(ing, str):
+                    # 문자열인 경우 첫 단어를 재료명으로 사용
+                    name = ing.split()[0] if " " in ing else ing
+                    if name.strip():
+                        upsert_chunk(
+                            cur=cur,
+                            chunk_id=None,
+                            recipe_id=recipe_id,
+                            step_id=None,
+                            step_no=None,
+                            section="ingredients",
+                            text=name.strip(),
+                            meta_json=None,
+                        )
+        return
+    
+    # ingredients_struct 처리
+    for item in ingredients_struct:
+        if isinstance(item, dict):
+            name = item.get("name", "").strip()
+            if not name:
+                continue
+            
+            # 재료명만 사용 (수량 정보는 제외)
+            # 숫자, 단위, 설명 제거 (예: "소고기 국거리용 180g" -> "소고기")
+            parts = name.split()
+            if parts:
+                base_name = parts[0]  # 첫 단어가 기본 재료명
+                
+                upsert_chunk(
+                    cur=cur,
+                    chunk_id=None,
+                    recipe_id=recipe_id,
+                    step_id=None,
+                    step_no=None,
+                    section="ingredients",
+                    text=base_name,
+                    meta_json=None,
+                )
+        elif isinstance(item, str):
+            # 문자열인 경우 그대로 사용
+            if item.strip():
+                upsert_chunk(
+                    cur=cur,
+                    chunk_id=None,
+                    recipe_id=recipe_id,
+                    step_id=None,
+                    step_no=None,
+                    section="ingredients",
+                    text=item.strip(),
+                    meta_json=None,
+                )
+
+
+# ------------------------------------------------------------
 # 메인 파이프라인
 # ------------------------------------------------------------
 def main() -> None:
@@ -169,59 +301,23 @@ def main() -> None:
                     difficulty=difficulty
                 )
 
-                # 2) steps → step/chunk UPSERT
-                norm_steps = normalize_steps(obj)
-                for st in norm_steps:
-                    step_no = st.get("no")
-                    text = st.get("text") or ""
+                # 2) 메타데이터 통합 청크 생성
+                create_metadata_chunk(
+                    cur=cur,
+                    recipe_id=recipe_id,
+                    title=title,
+                    author=author,
+                    servings=servings,
+                    total_time=total_time,
+                    difficulty=difficulty,
+                )
 
-                    step_id = upsert_step(
-                        cur=cur,
-                        step_id=st.get("step_id"),
-                        recipe_id=recipe_id,
-                        step_no=int(step_no) if step_no is not None else None,
-                        text=text,
-                        time_hint_sec=st.get("time_hint_sec"),
-                        tools_json=st.get("tools_json"),
-                        warnings_json=st.get("warnings_json"),
-                        meta_json=st.get("meta_json"),
-                    )
-
-                    upsert_chunk(
-                        cur=cur,
-                        chunk_id=st.get("chunk_id"),
-                        recipe_id=recipe_id,
-                        step_id=step_id,
-                        step_no=int(step_no) if step_no is not None else None,
-                        section="step",
-                        text=text,
-                        meta_json=None,
-                    )
-
-                # 3) (선택) 다른 섹션도 chunk로 저장하고 싶다면 주석 해제
-                for line in normalize_section_lines(obj, "ingredients"):
-                    upsert_chunk(
-                        cur=cur,
-                        chunk_id=None,
-                        recipe_id=recipe_id,
-                        step_id=None,
-                        step_no=None,
-                        section="ingredients",
-                        text=line,
-                        meta_json=None,
-                    )
-
-                for line in normalize_section_lines(obj, "tips"):
-                    upsert_chunk(
-                        cur=cur,
-                        chunk_id=None,
-                        recipe_id=recipe_id,
-                        step_id=None,
-                        step_no=None,
-                        section="tips",
-                        text=line,
-                        meta_json=None,
-                    )
+                # 3) 재료별 청크 생성
+                create_ingredient_chunks(
+                    cur=cur,
+                    recipe_id=recipe_id,
+                    obj=obj,
+                )
 
                 # 4) 원문 보존 (URL 포함)
                 upsert_recipe_doc(

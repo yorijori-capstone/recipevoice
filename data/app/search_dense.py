@@ -64,7 +64,17 @@ if ids:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT m.faiss_vector_id, c.chunk_id, c.text, s.step_no, r.recipe_id, r.title
+                SELECT
+                    m.faiss_vector_id,
+                    c.chunk_id,
+                    c.text,
+                    s.step_no,
+                    r.recipe_id,
+                    r.title,
+                    r.author,
+                    r.servings,
+                    r.total_time,
+                    r.difficulty
                 FROM chunk_embedding_meta m
                 JOIN chunk c ON c.chunk_id = m.chunk_id
                 LEFT JOIN step s ON s.step_id = c.step_id
@@ -101,5 +111,15 @@ scored.sort(key=lambda x: x[0], reverse=True)
 # 8) 출력
 print("\n=== Top-K 결과 ===")
 for rank, (sc, r) in enumerate(scored[:TOP_K], start=1):
-    print(f"[{rank}] score={sc:.3f} | {r['title']} (step {r['step_no']})")
-    print("     ", (r['text'] or "")[:120])
+    print(f"[{rank}] score={sc:.3f} | {r['title']}")
+    meta_parts = []
+    if r.get("author"):
+        meta_parts.append(f"작성자: {r['author']}")
+    if r.get("servings"):
+        meta_parts.append(f"인분: {r['servings']}")
+    if r.get("total_time"):
+        meta_parts.append(f"조리시간: {r['total_time']}")
+    if r.get("difficulty"):
+        meta_parts.append(f"난이도: {r['difficulty']}")
+    meta_str = " | ".join(meta_parts) if meta_parts else "(메타데이터 없음)"
+    print("     ", meta_str)
