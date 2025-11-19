@@ -22,7 +22,7 @@ Config.validate()
 # FastAPI 앱 생성
 app = FastAPI(
     title="Yorijori Planning Server",
-    description="레시피를 음성 안내용 대화 스크립트로 변환하는 플래닝 서버 (Google Gemini)",
+    description="레시피를 음성 안내용 대화 스크립트로 변환하는 플래닝 서버 (OpenAI GPT-5 Nano)",
     version="1.0.0"
 )
 
@@ -35,14 +35,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# LLM 클라이언트 초기화 (Gemini)
-llm_client = LLMClient(api_key=Config.GEMINI_API_KEY)
+# LLM 클라이언트 초기화 (OpenAI GPT-5 Nano)
+llm_client = LLMClient(api_key=Config.OPENAI_API_KEY)
 
 
 # ===== 커스텀 에러 핸들러 (신규 추가) =====
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request, exc):
     """사용자 친화적 에러 메시지 반환"""
+    
+    # 디버깅: 실제 에러 출력
+    print(f"⚠️  HTTPException 발생: status={exc.status_code}, detail={exc.detail}")
     
     error_messages = {
         404: {
@@ -53,12 +56,14 @@ async def http_exception_handler(request, exc):
         400: {
             "error": "INVALID_RECIPE",
             "message": "레시피 데이터가 올바르지 않습니다.",
-            "suggestion": "재료와 조리 단계가 포함된 레시피를 입력해주세요."
+            "suggestion": "재료와 조리 단계가 포함된 레시피를 입력해주세요.",
+            "detail": str(exc.detail)  # 실제 에러 추가
         },
         500: {
             "error": "SERVER_ERROR",
             "message": "서버에서 문제가 발생했습니다.",
-            "suggestion": "잠시 후 다시 시도해주세요. 문제가 지속되면 관리자에게 문의하세요."
+            "suggestion": "잠시 후 다시 시도해주세요. 문제가 지속되면 관리자에게 문의하세요.",
+            "detail": str(exc.detail)  # 실제 에러 추가
         }
     }
     
@@ -82,7 +87,7 @@ async def root():
     """헬스 체크"""
     return {
         "service": "Yorijori Planning Server",
-        "llm_provider": "Google Gemini",
+        "llm_provider": "OpenAI",
         "llm_model": Config.LLM_MODEL,
         "status": "running",
         "version": "1.0.0",
@@ -100,7 +105,7 @@ async def health_check():
     return {
         "status": "healthy",
         "llm_model": Config.LLM_MODEL,
-        "llm_provider": "Google Gemini",
+        "llm_provider": "OpenAI",
         "rag_server": Config.RAG_SERVER_URL
     }
 
@@ -182,8 +187,8 @@ async def create_plan(recipe: RecipeInput):
         # LLM 호출하여 음성 안내 스크립트 생성
         plan_data = llm_client.generate_plan(
             title=recipe.title,
-            ingredients=[ing.dict() for ing in recipe.ingredients],
-            steps=[step.dict() for step in recipe.steps]
+            ingredients=[ing.model_dump() for ing in recipe.ingredients],
+            steps=[step.model_dump() for step in recipe.steps]
         )
         
         # 응답 구조화
@@ -212,29 +217,20 @@ async def test_plan():
     테스트용 엔드포인트 (샘플 레시피로 테스트)
     """
     sample_recipe = RecipeInput(
-        title="엄마의 레시피, 소고기 미역국 끓이는 법",
+        title="간단한 계란 스크램블",
         ingredients=[
-            {"name": "소고기 국거리용", "quantity": "180g"},
-            {"name": "미역", "quantity": "20g"},
-            {"name": "참기름", "quantity": "1큰술"},
-            {"name": "국간장", "quantity": "1큰술"}
+            {"name": "계란", "quantity": "2개"},
+            {"name": "소금", "quantity": "한 꼬집"},
+            {"name": "식용유", "quantity": "1작은술"}
         ],
         steps=[
             {
                 "order": 1,
-                "instruction": "덩어리 고기를 사용할 경우, 고기의 결과 반대인 수직 방향으로 썰어주세요."
+                "instruction": "계란 2개를 그릇에 풀어주세요."
             },
             {
                 "order": 2,
-                "instruction": "미역 20g을 물에 불려주세요. 저울이 없다면 사진을 참고해서 양을 조절하시면 됩니다."
-            },
-            {
-                "order": 3,
-                "instruction": "냄비에 참기름을 두르고 센 불에서 고기와 미역을 볶아주세요."
-            },
-            {
-                "order": 4,
-                "instruction": "물 1L를 붓고 끓여주세요. 끓으면 국간장으로 간을 맞추세요."
+                "instruction": "팬에 기름을 두르고 중불에서 2분간 익혀주세요."
             }
         ]
     )

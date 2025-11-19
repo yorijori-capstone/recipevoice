@@ -19,7 +19,7 @@ Config.validate()
 app = Server("yorijori-planning-server")
 
 # LLM 클라이언트 초기화
-llm_client = LLMClient(api_key=Config.GEMINI_API_KEY)
+llm_client = LLMClient(api_key=Config.OPENAI_API_KEY)
 
 
 @app.list_tools()
