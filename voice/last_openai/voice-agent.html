@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>실시간 음성 에이전트 v12</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        .version {
+            text-align: center;
+            color: #888;
+            font-size: 12px;
+            margin-bottom: 30px;
+        }
+        .input-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 600;
+        }
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .btn {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 10px;
+        }
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        .btn-primary:hover:not(:disabled) {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        .btn-danger {
+            background: #f56565;
+            color: white;
+        }
+        .btn-danger:hover:not(:disabled) {
+            background: #e53e3e;
+        }
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .status {
+            text-align: center;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-weight: 600;
+        }
+        .status.idle {
+            background: #e2e8f0;
+            color: #4a5568;
+        }
+        .status.connecting {
+            background: #fef3c7;
+            color: #92400e;
+        }
+        .status.connected {
+            background: #d1fae5;
+            color: #065f46;
+        }
+        .status.error {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+        .transcript {
+            background: #f7fafc;
+            border-radius: 8px;
+            padding: 20px;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 20px;
+        }
+        .message {
+            margin-bottom: 15px;
+            padding: 10px;
+            border-radius: 8px;
+        }
+        .message.user {
+            background: #e6f3ff;
+            margin-left: 20px;
+        }
+        .message.assistant {
+            background: #f0f0f0;
+            margin-right: 20px;
+        }
+        .message-role {
+            font-weight: 600;
+            margin-bottom: 5px;
+            font-size: 12px;
+            text-transform: uppercase;
+        }
+        .message.user .message-role {
+            color: #2563eb;
+        }
+        .message.assistant .message-role {
+            color: #7c3aed;
+        }
+        .console {
+            background: #1a1a1a;
+            color: #00ff00;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎙️ 실시간 음성 에이전트</h1>
+        <div class="version">v12 - 한국어 최적화 (mini-realtime + PCM16 + verse)</div>
+        
+        <div class="input-group">
+            <label for="apiKey">OpenAI API Key</label>
+            <input type="password" id="apiKey" placeholder="sk-proj-...">
+        </div>
+
+        <div id="status" class="status idle">
+            대기 중
+        </div>
+
+        <button id="connectBtn" class="btn btn-primary">연결하기</button>
+        <button id="disconnectBtn" class="btn btn-danger" disabled>연결 종료</button>
+
+        <div id="transcript" class="transcript" style="display: none;">
+            <div id="messages"></div>
+        </div>
+
+        <div id="console" class="console"></div>
+    </div>
+
+    <script type="module">
+        const consoleDiv = document.getElementById('console');
+        
+        function log(msg) {
+            const line = document.createElement('div');
+            line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            consoleDiv.appendChild(line);
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+            console.log(msg);
+        }
+
+        log('v12 로드 - 한국어 최적화 (mini-realtime + PCM16 + verse)');
+
+        const apiKeyInput = document.getElementById('apiKey');
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const statusDiv = document.getElementById('status');
+        const transcriptDiv = document.getElementById('transcript');
+        const messagesDiv = document.getElementById('messages');
+
+        let ws = null;
+        let audioContext = null;
+        let audioWorklet = null;
+        let audioQueue = [];
+        let isPlaying = false;
+        let currentSource = null;
+
+        function updateStatus(text, type) {
+            statusDiv.textContent = text;
+            statusDiv.className = `status ${type}`;
+            log(`상태: ${text}`);
+        }
+
+        function addMessage(role, text) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `message ${role}`;
+            msgDiv.innerHTML = `
+                <div class="message-role">${role === 'user' ? '사용자' : '에이전트'}</div>
+                <div>${text}</div>
+            `;
+            messagesDiv.appendChild(msgDiv);
+            transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
+        }
+
+        // PCM16 오디오 디코딩 및 재생
+        async function decodeAndPlayPCM16(base64Audio) {
+            try {
+                if (!audioContext) {
+                    audioContext = new AudioContext({ sampleRate: 24000 });
+                }
+
+                // Base64 디코드
+                const binaryString = atob(base64Audio);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+
+                // PCM16을 Float32로 변환
+                const int16Array = new Int16Array(bytes.buffer);
+                const float32Array = new Float32Array(int16Array.length);
+                for (let i = 0; i < int16Array.length; i++) {
+                    float32Array[i] = int16Array[i] / 32768.0;
+                }
+
+                // AudioBuffer 생성
+                const audioBuffer = audioContext.createBuffer(1, float32Array.length, 24000);
+                audioBuffer.getChannelData(0).set(float32Array);
+                
+                // 큐에 추가
+                audioQueue.push(audioBuffer);
+                processAudioQueue();
+            } catch (error) {
+                log('오디오 디코딩 오류: ' + error.message);
+            }
+        }
+
+        // 오디오 큐 처리 (순차 재생)
+        function processAudioQueue() {
+            if (isPlaying || audioQueue.length === 0) return;
+
+            isPlaying = true;
+            const audioBuffer = audioQueue.shift();
+
+            currentSource = audioContext.createBufferSource();
+            currentSource.buffer = audioBuffer;
+            currentSource.connect(audioContext.destination);
+            
+            currentSource.onended = () => {
+                currentSource = null;
+                isPlaying = false;
+                
+                // 큐에 남은 오디오 계속 재생
+                if (audioQueue.length > 0) {
+                    processAudioQueue();
+                }
+            };
+
+            currentSource.start();
+        }
+
+        // 오디오 인터럽트 (사용자가 말할 때)
+        function interruptAudio() {
+            audioQueue = [];
+            
+            if (currentSource) {
+                try {
+                    currentSource.stop();
+                    currentSource = null;
+                } catch (e) {
+                    // 이미 정지된 경우 무시
+                }
+            }
+            
+            isPlaying = false;
+            log('🔇 오디오 재생 중단');
+        }
+
+        connectBtn.addEventListener('click', async () => {
+            log('연결 버튼 클릭');
+            
+            const apiKey = apiKeyInput.value.trim();
+            if (!apiKey) {
+                alert('API Key를 입력해주세요!');
+                return;
+            }
+
+            connectBtn.disabled = true;
+            updateStatus('연결 중...', 'connecting');
+
+            try {
+                log('WebSocket 연결 시작 (gpt-4o-mini-realtime-preview)...');
+
+                const url = 'wss://api.openai.com/v1/realtime?model=gpt-4o-mini-realtime-preview';
+                ws = new WebSocket(url, [
+                    'realtime',
+                    `openai-insecure-api-key.${apiKey}`,
+                    'openai-beta.realtime-v1'
+                ]);
+
+                ws.addEventListener('open', async () => {
+                    log('✓ WebSocket 연결됨');
+                    updateStatus('세션 설정 중...', 'connecting');
+
+                    // 한국어 최적화 세션 설정
+                    ws.send(JSON.stringify({
+                        type: 'session.update',
+                        session: {
+                            modalities: ['text', 'audio'],
+                            instructions: `You are a helpful Korean voice assistant. You MUST respond in Korean language only.
+당신은 친절한 한국어 음성 어시스턴트입니다.
+- 반드시 한국어로만 대답하세요
+- 존댓말을 사용하고 친근하게 대화하세요  
+- 질문에 간결하고 명확하게 답변하세요
+- 영어나 다른 언어는 절대 사용하지 마세요`,
+                            voice: 'verse',
+                            input_audio_format: 'pcm16',
+                            output_audio_format: 'pcm16',
+                            input_audio_transcription: {
+                                model: 'whisper-1',
+                                language: 'ko'
+                            },
+                            turn_detection: {
+                                type: 'server_vad',
+                                threshold: 0.5,
+                                prefix_padding_ms: 300,
+                                silence_duration_ms: 700,
+                                create_response: true
+                            },
+                            temperature: 0.8,
+                            max_response_output_tokens: 2048
+                        }
+                    }));
+
+                    log('✓ 세션 설정 완료 (voice: verse, format: pcm16)');
+
+                    // 마이크 시작
+                    log('마이크 권한 요청...');
+                    const stream = await navigator.mediaDevices.getUserMedia({ 
+                        audio: {
+                            channelCount: 1,
+                            sampleRate: 24000,
+                            echoCancellation: true,
+                            noiseSuppression: true,
+                            autoGainControl: true
+                        }
+                    });
+                    log('✓ 마이크 접근 허용');
+
+                    audioContext = new AudioContext({ sampleRate: 24000 });
+                    const source = audioContext.createMediaStreamSource(stream);
+                    
+                    await audioContext.audioWorklet.addModule(
+                        'data:text/javascript,' + encodeURIComponent(`
+                            class AudioProcessor extends AudioWorkletProcessor {
+                                constructor() {
+                                    super();
+                                    this.bufferSize = 4096;
+                                    this.buffer = new Float32Array(this.bufferSize);
+                                    this.bufferIndex = 0;
+                                }
+                                
+                                process(inputs, outputs) {
+                                    const input = inputs[0];
+                                    if (input.length > 0 && input[0]) {
+                                        const samples = input[0];
+                                        
+                                        for (let i = 0; i < samples.length; i++) {
+                                            this.buffer[this.bufferIndex++] = samples[i];
+                                            
+                                            if (this.bufferIndex >= this.bufferSize) {
+                                                const int16Array = new Int16Array(this.bufferSize);
+                                                for (let j = 0; j < this.bufferSize; j++) {
+                                                    const s = Math.max(-1, Math.min(1, this.buffer[j]));
+                                                    int16Array[j] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                                                }
+                                                this.port.postMessage(int16Array.buffer, [int16Array.buffer]);
+                                                this.bufferIndex = 0;
+                                            }
+                                        }
+                                    }
+                                    return true;
+                                }
+                            }
+                            registerProcessor('audio-processor', AudioProcessor);
+                        `)
+                    );
+
+                    audioWorklet = new AudioWorkletNode(audioContext, 'audio-processor');
+                    source.connect(audioWorklet);
+
+                    audioWorklet.port.onmessage = (event) => {
+                        if (ws && ws.readyState === WebSocket.OPEN) {
+                            const base64Audio = btoa(String.fromCharCode(...new Uint8Array(event.data)));
+                            ws.send(JSON.stringify({
+                                type: 'input_audio_buffer.append',
+                                audio: base64Audio
+                            }));
+                        }
+                    };
+
+                    updateStatus('✅ 연결됨 - 말해보세요!', 'connected');
+                    disconnectBtn.disabled = false;
+                    transcriptDiv.style.display = 'block';
+                    messagesDiv.innerHTML = '';
+                    log('✓ 모든 설정 완료! 이제 말해보세요 🎤');
+                });
+
+                ws.addEventListener('message', async (event) => {
+                    const data = JSON.parse(event.data);
+
+                    // 핵심 이벤트만 로깅
+                    if (data.type === 'response.audio.delta') {
+                        await decodeAndPlayPCM16(data.delta);
+                    } 
+                    else if (data.type === 'response.audio.done') {
+                        log('🔊 오디오 수신 완료');
+                    }
+                    else if (data.type === 'conversation.item.input_audio_transcription.completed') {
+                        addMessage('user', data.transcript);
+                        log('👤 ' + data.transcript);
+                    }
+                    else if (data.type === 'conversation.item.input_audio_transcription.failed') {
+                        log('⚠️ 전사 실패 (무시)');
+                    }
+                    else if (data.type === 'response.done') {
+                        const output = data.response?.output?.[0];
+                        if (output?.content) {
+                            for (const content of output.content) {
+                                if (content.transcript) {
+                                    addMessage('assistant', content.transcript);
+                                    log('🤖 ' + content.transcript);
+                                }
+                            }
+                        }
+                        
+                        if (data.response.status === 'failed') {
+                            log('❌ 응답 실패: ' + JSON.stringify(data.response.status_details));
+                        }
+                    }
+                    else if (data.type === 'input_audio_buffer.speech_started') {
+                        log('🎤 말하기 시작');
+                        interruptAudio();
+                    }
+                    else if (data.type === 'input_audio_buffer.speech_stopped') {
+                        log('🎤 말하기 종료');
+                    }
+                    else if (data.type === 'error') {
+                        log('❌ 오류: ' + JSON.stringify(data.error));
+                        updateStatus('오류 발생', 'error');
+                    }
+                    else if (data.type === 'session.updated') {
+                        log('✓ 세션 업데이트 완료');
+                    }
+                });
+
+                ws.addEventListener('error', (error) => {
+                    log('❌ WebSocket 오류');
+                    updateStatus('연결 오류', 'error');
+                    connectBtn.disabled = false;
+                });
+
+                ws.addEventListener('close', () => {
+                    log('WebSocket 연결 종료');
+                    updateStatus('연결 종료됨', 'idle');
+                    connectBtn.disabled = false;
+                    disconnectBtn.disabled = true;
+                });
+
+            } catch (error) {
+                log('❌ 오류: ' + error.message);
+                console.error('연결 실패:', error);
+                updateStatus('연결 실패: ' + error.message, 'error');
+                connectBtn.disabled = false;
+            }
+        });
+
+        disconnectBtn.addEventListener('click', () => {
+            log('연결 종료 요청');
+            
+            interruptAudio();
+            
+            if (audioWorklet) {
+                audioWorklet.disconnect();
+                audioWorklet = null;
+            }
+
+            if (audioContext) {
+                audioContext.close();
+                audioContext = null;
+            }
+            
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+            
+            updateStatus('연결 종료됨', 'idle');
+            connectBtn.disabled = false;
+            disconnectBtn.disabled = true;
+        });
+
+        log('초기화 완료');
+    </script>
+</body>
+</html>
