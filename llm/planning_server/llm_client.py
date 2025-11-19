@@ -7,7 +7,7 @@ from .prompts import SYSTEM_PROMPT, create_planning_prompt
 
 
 class LLMClient:
-    """LLM API 호출 및 응답 처리 (OpenAI GPT-4o-mini)"""
+    """LLM API 호출 및 응답 처리 (OpenAI GPT-5 Nano)"""
     
     def __init__(self, api_key: str = None):
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
@@ -16,7 +16,7 @@ class LLMClient:
         
         # OpenAI 클라이언트 초기화
         self.client = OpenAI(api_key=self.api_key)
-        self.model = "gpt-4o-mini"
+        self.model = "gpt-4o-mini"  # 임시로 gpt-4o-mini로 변경
     
     def generate_plan(
         self, 
@@ -54,16 +54,15 @@ class LLMClient:
             try:
                 print(f"🔄 LLM 호출 시도 {attempt + 1}/{max_retries}...")
                 
-                # GPT-4o-mini 호출
+                # GPT-4o-mini 호출 (비교 테스트)
                 response = self.client.chat.completions.create(
                     model=self.model,
                     messages=[
                         {"role": "system", "content": SYSTEM_PROMPT},
                         {"role": "user", "content": user_prompt}
                     ],
-                    temperature=0.3,
-                    max_tokens=4096,
-                    response_format={"type": "json_object"}
+                    max_tokens=4096,  # GPT-4o-mini는 max_tokens 사용
+                    response_format={"type": "json_object"}  # JSON 모드 강제
                 )
                 
                 # 응답 텍스트 추출
@@ -80,7 +79,7 @@ class LLMClient:
                 # JSON 파싱
                 plan_data = self._parse_json_response(response_text)
                 
-                # 필수 필드 검증
+                # 필수 필드 검증 (Nano용 강화)
                 self._validate_plan_data(plan_data)
                 
                 print(f"✅ 검증 완료")
@@ -91,7 +90,7 @@ class LLMClient:
                 print(f"⚠️  {last_error}")
                 if attempt < max_retries - 1:
                     import time
-                    time.sleep(2)
+                    time.sleep(2)  # 2초 대기 후 재시도
                 continue
             
             except Exception as e:
@@ -99,7 +98,7 @@ class LLMClient:
                 print(f"⚠️  에러 발생 (시도 {attempt + 1}/{max_retries}): {str(e)}")
                 if attempt < max_retries - 1:
                     import time
-                    time.sleep(2)
+                    time.sleep(2)  # 2초 대기 후 재시도
                 continue
         
         # 모든 재시도 실패
@@ -112,12 +111,20 @@ class LLMClient:
     ) -> str:
         """
         일반 대화 응답 생성 (Agent용)
+        
+        Args:
+            user_input: 사용자 입력
+            chat_history: 대화 히스토리 (선택)
+        
+        Returns:
+            str: AI 응답
         """
         try:
             messages = [
                 {"role": "system", "content": "당신은 친절한 요리 도우미 AI입니다."}
             ]
             
+            # 대화 히스토리 추가
             if chat_history:
                 messages.append({"role": "assistant", "content": chat_history})
             
@@ -136,7 +143,11 @@ class LLMClient:
             raise ValueError(f"채팅 응답 생성 실패: {str(e)}")
     
     def _parse_json_response(self, text: str) -> Dict:
-        """LLM 응답에서 JSON 추출"""
+        """
+        LLM 응답에서 JSON 추출
+        
+        GPT-5 Nano는 JSON 모드 사용 시 대부분 깔끔하게 반환
+        """
         text = text.strip()
         
         try:
@@ -147,29 +158,38 @@ class LLMClient:
             raise ValueError(f"JSON 파싱 실패: {str(e)}\n응답 내용:\n{text}")
     
     def _validate_plan_data(self, data: Dict):
-        """응답 데이터 필수 필드 검증"""
+        """
+        응답 데이터 필수 필드 검증 + 할루시네이션 체크 (최소화 버전)
+        """
+        # 필수 최상위 필드
         required_fields = ["opening_remark", "planned_steps", "closing_remark"]
         
         for field in required_fields:
             if field not in data:
                 raise ValueError(f"❌ 필수 필드 누락: '{field}'")
         
+        # planned_steps 검증
         if not isinstance(data["planned_steps"], list):
             raise ValueError("❌ 'planned_steps'는 리스트여야 합니다.")
         
         if len(data["planned_steps"]) == 0:
             raise ValueError("❌ 'planned_steps'가 비어있습니다.")
         
+        # 각 step 상세 검증 (필드 최소화: 5개)
         required_step_fields = [
-            "order", "script", "retry_script", "fallback_script",
-            "estimated_time_sec", "timer_required", "timer_message"
+            "order", "script", "retry_script",
+            "estimated_time_sec", "timer_required"
         ]
         
         for i, step in enumerate(data["planned_steps"], 1):
+            # 필드 존재 여부
             for field in required_step_fields:
                 if field not in step:
-                    raise ValueError(f"❌ {i}번째 step에 '{field}' 필드 없음")
+                    raise ValueError(
+                        f"❌ {i}번째 step에 '{field}' 필드 없음"
+                    )
             
+            # 타입 검증
             if not isinstance(step["order"], int):
                 raise ValueError(f"❌ {i}번째 step의 order는 정수여야 함")
             
@@ -179,25 +199,31 @@ class LLMClient:
             if not isinstance(step["estimated_time_sec"], int):
                 raise ValueError(f"❌ {i}번째 step의 estimated_time_sec는 정수여야 함")
             
-            # 영문자 포함 검증 (발음 규칙 위반 체크)
-            for field in ["script", "retry_script", "fallback_script", "timer_message"]:
+            # 할루시네이션 체크: 영문자 포함 검증 (발음 규칙 위반)
+            for field in ["script", "retry_script"]:
                 text = step.get(field, "")
+                # 2글자 이상 연속 영문 검사
                 if re.search(r'[a-zA-Z]{2,}', text):
+                    # 허용 단어 리스트 (필요시 추가)
                     allowed_words = []
+                    
+                    # 허용 단어가 아니면 에러
                     words = re.findall(r'[a-zA-Z]+', text)
                     for word in words:
                         if word.lower() not in allowed_words:
                             raise ValueError(
-                                f"❌ {i}번째 step의 {field}에 영문자 포함됨: '{word}' in '{text}'"
+                                f"❌ {i}번째 step의 {field}에 영문자 포함됨 (할루시네이션 가능성): '{word}'"
                             )
 
 
+# 테스트용 함수
 if __name__ == "__main__":
     from dotenv import load_dotenv
     load_dotenv()
     
     client = LLMClient()
     
+    # 예시 레시피
     result = client.generate_plan(
         title="엄마의 레시피, 소고기 미역국 끓이는 법",
         ingredients=[

@@ -45,20 +45,10 @@ class RecipeInput(BaseModel):
 
 
 class PlannedStep(BaseModel):
-    """음성 안내용 대화 스크립트"""
+    """음성 안내용 대화 스크립트 (최소화 버전)"""
     order: int = Field(..., description="단계 순서")
     script: str = Field(..., description="음성 안내 스크립트 (대화체)")
     retry_script: str = Field(..., description="'다시' 명령 시 재설명 스크립트")
-    pause_hint: str = Field(
-        default="잠시 멈췄습니다. 준비되면 '계속'이라고 말씀해주세요.",
-        description="'멈춰' 명령 시 안내 멘트"
-    )
-    fallback_script: str = Field(
-        default="이해가 어려우시면 천천히 다시 설명해드릴게요.",
-        description="'뭐라고?' 명령 시 대체 스크립트"
-    )
-    
-    # ===== 타이머 기능 추가 =====
     estimated_time_sec: int = Field(
         default=60,
         description="예상 소요 시간 (초), 불명확하면 60초"
@@ -67,11 +57,11 @@ class PlannedStep(BaseModel):
         default=False,
         description="타이머 필요 여부 (True=자동 타이머 시작)"
     )
-    timer_message: str = Field(
-        default="타이머를 시작합니다.",
-        description="타이머 시작 시 안내 멘트"
-    )
-    # ========================
+    
+    # 제거된 필드 (프론트엔드에서 고정값 사용):
+    # - pause_hint: "잠시 멈췄습니다. '계속'이라고 말씀해주세요." (고정)
+    # - fallback_script: retry_script 재사용
+    # - timer_message: "타이머를 시작합니다." (고정)
 
 
 class PlanningOutput(BaseModel):
