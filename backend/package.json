@@ -3,18 +3,15 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
-    "dev:v2": "tsx watch src/serverV2.ts",
+    "dev": "tsx watch src/serverV2.ts",
     "build": "tsc",
-    "start": "node dist/server.js",
-    "start:v2": "node dist/serverV2.js",
+    "start": "node dist/serverV2.js",
     "import": "tsx scripts/import-recipes.ts",
     "db:init": "psql -U postgres -f scripts/init-db.sql",
     "clean:all": "tsx scripts/batch-clean-recipes.ts"
   },
   "dependencies": {
     "@langchain/openai": "^1.1.2",
-    "@modelcontextprotocol/sdk": "^1.22.0",
     "axios": "^1.13.2",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",

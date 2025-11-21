@@ -1,11 +1,37 @@
 # 요리조리(Yorijori) V2 개발 환경 설정 가이드
 
+## ⚡ 빠른 시작 (권장)
+
+협업 개발자라면 이 방법으로 5분 안에 시작하세요!
+
+```bash
+# 1. PostgreSQL 데이터베이스 생성
+psql -U postgres -c "CREATE DATABASE yorijori"
+
+# 2. SQL 덤프 파일로 전체 데이터 복원
+psql -U postgres -d yorijori < db_dumps/yorijori_full_backup.sql
+
+# 3. Backend 의존성 설치 및 실행
+cd backend
+npm install
+npm run dev
+
+# 4. Frontend 의존성 설치 및 실행 (새 터미널)
+cd frontend2
+npm install
+npm run dev
+```
+
+**완료!** http://localhost:5173 에서 바로 사용 가능합니다.
+
+---
+
 ## 1. 사전 요구사항
 
-- Node.js 18+
-- PostgreSQL 14+
+- **Node.js 18+** (필수)
+- **PostgreSQL 14+** (필수)
+- **OpenAI API Key** (필수)
 - npm 또는 yarn
-- OpenAI API Key
 
 ## 2. 프로젝트 클론 및 의존성 설치
 
@@ -25,7 +51,48 @@ npm install
 
 ## 3. PostgreSQL 데이터베이스 설정
 
-### 3-1. 데이터베이스 생성
+### ⭐ 방법 1: SQL 덤프로 즉시 복원 (추천)
+
+이 방법을 사용하면 **Planning 완료된 102개 레시피**를 즉시 사용할 수 있습니다.
+
+```bash
+# 1. 데이터베이스 생성
+psql -U postgres
+
+postgres=# CREATE DATABASE yorijori;
+postgres=# \q
+
+# 2. SQL 덤프 파일로 전체 복원 (스키마 + 데이터)
+cd last_project
+psql -U postgres -d yorijori < db_dumps/yorijori_full_backup.sql
+
+# 3. 복원 확인
+psql -U postgres -d yorijori
+
+yorijori=# SELECT COUNT(*) FROM recipes;
+ count
+-------
+   102
+(1 row)
+
+yorijori=# SELECT COUNT(*) FROM cleaned_recipes;
+ count
+-------
+   102
+(1 row)
+
+yorijori=# \q
+```
+
+**완료!** 이제 바로 서버를 실행할 수 있습니다.
+
+---
+
+### 방법 2: 수동 스키마 생성 + Planning 실행 (50분 소요)
+
+덤프 파일이 없거나 처음부터 설정하려면 이 방법을 사용하세요.
+
+#### 3-1. 데이터베이스 생성
 
 ```bash
 # PostgreSQL 접속
@@ -36,9 +103,10 @@ CREATE DATABASE yorijori;
 
 # 연결 확인
 \c yorijori
+\q
 ```
 
-### 3-2. 스키마 생성
+#### 3-2. 스키마 생성
 
 ```bash
 # backend 디렉토리에서 실행
@@ -46,34 +114,63 @@ cd backend
 psql -U postgres -d yorijori -f schema.sql
 ```
 
-### 3-3. 데이터베이스 덤프 복원 (기존 데이터 사용)
+#### 3-3. 원본 레시피 Import + Planning 실행
 
-**Option A: 전체 데이터 복원 (추천)**
+**⚠️ 주의: 이 과정은 약 50분 소요됩니다!**
 
 ```bash
-# 데이터베이스 덤프 파일 생성 (공유하는 사람)
-pg_dump -U postgres -d yorijori -F c -f yorijori_backup.dump
+cd backend
 
-# 데이터 복원 (받는 사람)
-pg_restore -U postgres -d yorijori -c yorijori_backup.dump
+# 1. 원본 레시피 102개 Import
+npm run import
+
+# 2. Planning 실행 (GPT-4o-mini로 스크립트 생성)
+npm run clean:all
 ```
 
-**Option B: SQL 형식으로 복원**
+---
+
+## 3-4. 데이터베이스 덤프 생성 (팀장/공유자용)
+
+팀원들과 데이터베이스를 공유하려면 덤프 파일을 생성하세요.
+
+### ✅ SQL 형식 (추천 - Git에 포함 가능)
 
 ```bash
-# SQL 덤프 생성 (공유하는 사람)
-pg_dump -U postgres -d yorijori > yorijori_backup.sql
+# 전체 데이터베이스 덤프 생성
+pg_dump -U postgres -d yorijori > db_dumps/yorijori_full_backup.sql
 
-# 데이터 복원 (받는 사람)
-psql -U postgres -d yorijori < yorijori_backup.sql
+# Git에 추가
+git add db_dumps/yorijori_full_backup.sql
+git commit -m "Add database dump with 102 cleaned recipes"
+git push
 ```
 
-**Option C: 특정 테이블만 복원**
+### 대안: Binary 형식 (파일 크기 작음)
 
 ```bash
-# cleaned_recipes + cleaned_steps만 공유 (Planning 결과)
-pg_dump -U postgres -d yorijori -t cleaned_recipes -t cleaned_steps > cleaned_data.sql
-psql -U postgres -d yorijori < cleaned_data.sql
+# Binary 덤프 생성 (압축됨)
+pg_dump -U postgres -d yorijori -F c -f db_dumps/yorijori_backup.dump
+
+# 복원 방법 (팀원):
+pg_restore -U postgres -d yorijori -c db_dumps/yorijori_backup.dump
+```
+
+### Planning 결과만 공유 (가벼움)
+
+```bash
+# cleaned_recipes + cleaned_steps만 덤프
+pg_dump -U postgres -d yorijori \
+  -t cleaned_recipes \
+  -t cleaned_steps \
+  -t recipes \
+  -t ingredients \
+  -t steps \
+  > db_dumps/cleaned_recipes_only.sql
+
+# 팀원 복원:
+psql -U postgres -d yorijori -f schema.sql
+psql -U postgres -d yorijori < db_dumps/cleaned_recipes_only.sql
 ```
 
 ## 4. 환경 변수 설정

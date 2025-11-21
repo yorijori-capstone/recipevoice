@@ -7,7 +7,6 @@ import { WebSocketServer, WebSocket } from 'ws';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import recipeRoutes from './routes/recipes.js';
-import cookingRoutes from './routes/cooking.js';
 import cookingV2Routes, { getCookingServiceV2 } from './routes/cookingV2.js';
 
 dotenv.config();
@@ -24,10 +23,7 @@ app.get('/health', (req, res) => {
 // Recipe API routes
 app.use('/api/recipes', recipeRoutes);
 
-// Cooking mode API routes (legacy)
-app.use('/api/cooking', cookingRoutes);
-
-// Cooking mode API routes (V2)
+// Cooking mode API routes
 app.use('/api/cooking/v2', cookingV2Routes);
 
 const PORT = process.env.PORT || 3001;
