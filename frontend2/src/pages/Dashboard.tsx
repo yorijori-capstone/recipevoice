@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Navbar } from '../components/Navbar';
 import { SearchBar } from '../components/SearchBar';
 import { RecipeCard } from '../components/RecipeCard';
+import { RecipeGenerateModal } from '../components/RecipeGenerateModal';
 
 interface Recipe {
   id: number;
@@ -13,10 +15,12 @@ interface Recipe {
 }
 
 export function Dashboard() {
+  const navigate = useNavigate();
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
   const limit = 24; // 페이지당 24개 (3x8 그리드)
 
   useEffect(() => {
@@ -62,6 +66,12 @@ export function Dashboard() {
     return pages;
   };
 
+  const handleRecipeGenerated = (recipeId: string) => {
+    setShowGenerateModal(false);
+    // Navigate to cooking mode with generated recipe
+    navigate(`/cooking/${recipeId}`);
+  };
+
   return (
     <>
       <Navbar />
@@ -69,6 +79,16 @@ export function Dashboard() {
         <div className="text-center mb-4">
           <h1 className="display-4">레시피 모음</h1>
           <p className="text-muted">총 {total}개의 레시피</p>
+        </div>
+
+        {/* AI Recipe Generation Button */}
+        <div className="d-flex justify-content-center mb-4">
+          <button
+            className="btn btn-success btn-lg"
+            onClick={() => setShowGenerateModal(true)}
+          >
+            🤖 AI로 새 레시피 생성하기
+          </button>
         </div>
 
         <SearchBar />
@@ -198,6 +218,14 @@ export function Dashboard() {
           )}
         </section>
       </div>
+
+      {/* Recipe Generate Modal */}
+      {showGenerateModal && (
+        <RecipeGenerateModal
+          onClose={() => setShowGenerateModal(false)}
+          onRecipeGenerated={handleRecipeGenerated}
+        />
+      )}
     </>
   );
 }

@@ -7,14 +7,14 @@ import { useWebSocket } from '../hooks/useWebSocket';
 import { useAudioRecorder } from '../hooks/useAudioRecorder';
 
 export default function VoiceTest() {
-  const { 
-    status, 
-    transcripts, 
-    sendAudioChunk, 
+  const {
+    status,
+    transcripts,
+    sendAudioChunk,
     startStreaming: wsStartStreaming,
     stopStreaming: wsStopStreaming,
     isConnected,
-    setVADMode  // 🆕 추가
+    setVadMode  // Fixed: use correct camelCase name
   } = useWebSocket();
   
   const { isStreaming, startStreaming, stopStreaming } = useAudioRecorder(
@@ -23,15 +23,16 @@ export default function VoiceTest() {
 
   const [isPushToTalk, setIsPushToTalk] = useState(false);
   const [isPressing, setIsPressing] = useState(false);
+  const [pressStartTime, setPressStartTime] = useState<number | null>(null);
 
   // 🆕 모드 변경 시 서버에 알림
   useEffect(() => {
     if (isConnected) {
-      const mode = isPushToTalk ? 'manual' : 'auto';
-      setVADMode(mode);
+      const mode = isPushToTalk ? 'none' : 'server_vad';
+      setVadMode(mode);
       console.log(`🎤 Mode changed to: ${mode}`);
     }
-  }, [isPushToTalk, isConnected, setVADMode]);
+  }, [isPushToTalk, isConnected, setVadMode]);
 
   const handleStart = () => {
     wsStartStreaming();
@@ -46,16 +47,34 @@ export default function VoiceTest() {
   const handlePushStart = () => {
     if (!isPressing) {
       setIsPressing(true);
+      setPressStartTime(Date.now()); // 🆕 시작 시간 기록
       wsStartStreaming();
       startStreaming();
+      console.log('🎤 Push button pressed - recording started');
     }
   };
 
   const handlePushStop = () => {
     if (isPressing) {
+      const recordingDuration = pressStartTime ? Date.now() - pressStartTime : 0;
+      console.log(`⏱️ Recording duration: ${recordingDuration}ms`);
+      
+      // 🆕 최소 300ms 이상 녹음했는지 확인
+      if (recordingDuration < 300) {
+        console.warn('⚠️ Recording too short, minimum 300ms required');
+        // 짧게 눌렀을 경우 경고 표시 (선택사항)
+        alert('너무 짧게 녹음했습니다. 최소 0.3초 이상 버튼을 누르고 계세요.');
+        setIsPressing(false);
+        stopStreaming();
+        wsStopStreaming();
+        return;
+      }
+      
       setIsPressing(false);
+      setPressStartTime(null);
       stopStreaming();
       wsStopStreaming();
+      console.log('🛑 Push button released - audio sent');
     }
   };
 

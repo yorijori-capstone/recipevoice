@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef } from 'react';
 
 interface Transcript {
   role: 'user' | 'assistant';
@@ -6,101 +6,28 @@ interface Transcript {
   timestamp: Date;
 }
 
-export function useWebSocket() {
+interface UseWebSocketOptions {
+  onUserTranscription?: (text: string) => void;
+  onAssistantTranscript?: (text: string) => void;
+  onFunctionCall?: (name: string, callId: string, args: any) => void;
+  onError?: (error: string) => void;
+  // V2 events
+  onLangChainResponse?: (result: any) => void;
+  onStepChanged?: (data: any) => void;
+  onSessionStateUpdated?: (data: any) => void;
+}
+
+export function useWebSocket(options: UseWebSocketOptions = {}) {
   const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
   const [transcripts, setTranscripts] = useState<Transcript[]>([]);
   const [isConnected, setIsConnected] = useState(false);
-  
+  const [error, setError] = useState<string | null>(null);
+
   const wsRef = useRef<WebSocket | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioQueueRef = useRef<Float32Array[]>([]);
   const isPlayingRef = useRef(false);
   const currentTranscriptRef = useRef<string>('');
-
-  useEffect(() => {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/api/realtime/ws`;
-
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
-
-    ws.onopen = () => {
-      console.log('✅ Connected to backend WebSocket');
-      setStatus('connected');
-      setIsConnected(true);
-    };
-
-    ws.onmessage = async (event) => {
-      try {
-        const data = JSON.parse(event.data);
-
-        switch (data.type) {
-          case 'user_transcription':
-            setTranscripts(prev => [...prev, {
-              role: 'user',
-              text: data.transcript,
-              timestamp: new Date()
-            }]);
-            break;
-
-          case 'assistant_transcript_delta':
-            currentTranscriptRef.current += data.delta;
-            break;
-
-          case 'assistant_transcript_done':
-            if (currentTranscriptRef.current) {
-              setTranscripts(prev => [...prev, {
-                role: 'assistant',
-                text: currentTranscriptRef.current,
-                timestamp: new Date()
-              }]);
-              currentTranscriptRef.current = '';
-            }
-            break;
-
-          case 'audio_delta':
-            const audioData = base64ToFloat32Array(data.audio);
-            audioQueueRef.current.push(audioData);
-            if (!isPlayingRef.current) {
-              playAudioQueue();
-            }
-            break;
-
-          // 🆕 VAD 모드 변경 확인
-          case 'vad_mode_changed':
-            console.log(`✅ VAD mode changed to: ${data.mode}`);
-            break;
-
-          case 'error':
-            console.error('Error from server:', data.error);
-            break;
-        }
-      } catch (error) {
-        console.error('Error parsing message:', error);
-      }
-    };
-
-    ws.onerror = (error) => {
-      console.error('WebSocket error:', error);
-      setStatus('disconnected');
-      setIsConnected(false);
-    };
-
-    ws.onclose = () => {
-      console.log('🔌 Disconnected from backend');
-      setStatus('disconnected');
-      setIsConnected(false);
-    };
-
-    // Audio context setup
-    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-    audioContextRef.current = new AudioContextClass({ sampleRate: 24000 });
-
-    return () => {
-      ws.close();
-      audioContextRef.current?.close();
-    };
-  }, []);
 
   const playAudioQueue = useCallback(async () => {
     if (audioQueueRef.current.length === 0 || !audioContextRef.current) {
@@ -126,6 +53,164 @@ export function useWebSocket() {
     source.start();
   }, []);
 
+  const connect = useCallback((sessionId?: string) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      console.log('⚠️ [useWebSocket] Already connected - skipping connect()');
+      return;
+    }
+
+    console.log(`🔌 [useWebSocket] connect() called with sessionId: ${sessionId}`);
+    setStatus('connecting');
+    const wsUrl = 'ws://localhost:3001';
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      console.log('✅ [useWebSocket] Connected to backend WebSocket');
+      setStatus('connected');
+      setIsConnected(true);
+      setError(null);
+
+      // Initialize session with context
+      if (sessionId) {
+        ws.send(JSON.stringify({
+          type: 'init_session',
+          sessionId
+        }));
+        console.log(`📤 [useWebSocket] Sent init_session with sessionId: ${sessionId}`);
+      }
+    };
+
+    ws.onmessage = async (event) => {
+      try {
+        const data = JSON.parse(event.data);
+
+        switch (data.type) {
+          case 'user_transcription':
+            const userText = data.transcript;
+            setTranscripts(prev => [...prev, {
+              role: 'user',
+              text: userText,
+              timestamp: new Date()
+            }]);
+            // Call callback if provided
+            if (options.onUserTranscription) {
+              options.onUserTranscription(userText);
+            }
+            break;
+
+          case 'assistant_transcript_delta':
+            currentTranscriptRef.current += data.delta;
+            // Call callback with accumulated text
+            if (options.onAssistantTranscript) {
+              options.onAssistantTranscript(currentTranscriptRef.current);
+            }
+            break;
+
+          case 'assistant_transcript_done':
+            if (currentTranscriptRef.current) {
+              setTranscripts(prev => [...prev, {
+                role: 'assistant',
+                text: currentTranscriptRef.current,
+                timestamp: new Date()
+              }]);
+              currentTranscriptRef.current = '';
+            }
+            break;
+
+          case 'audio_delta':
+            const audioData = base64ToFloat32Array(data.audio);
+            audioQueueRef.current.push(audioData);
+            if (!isPlayingRef.current) {
+              playAudioQueue();
+            }
+            break;
+
+          case 'vad_mode_changed':
+            console.log(`✅ VAD mode changed to: ${data.mode}`);
+            break;
+
+          case 'function_call':
+            console.log(`🔧 [useWebSocket] Function call: ${data.name}`);
+            if (options.onFunctionCall) {
+              options.onFunctionCall(data.name, data.call_id, data.arguments);
+            }
+            break;
+
+          case 'error':
+            console.error('Error from server:', data.error);
+            setError(data.error);
+            if (options.onError) {
+              options.onError(data.error);
+            }
+            break;
+
+          case 'langchain_response':
+            console.log('🧠 [useWebSocket] LangChain response:', data.result);
+            if (options.onLangChainResponse) {
+              options.onLangChainResponse(data.result);
+            }
+            break;
+
+          case 'step_changed':
+            console.log('🔄 [useWebSocket] Step changed:', data);
+            if (options.onStepChanged) {
+              options.onStepChanged(data);
+            }
+            break;
+
+          case 'session_state_updated':
+            console.log('📊 [useWebSocket] Session state updated:', data);
+            if (options.onSessionStateUpdated) {
+              options.onSessionStateUpdated(data);
+            }
+            break;
+        }
+      } catch (error) {
+        console.error('Error parsing message:', error);
+        setError('Failed to parse message from server');
+      }
+    };
+
+    ws.onerror = (event) => {
+      console.error('WebSocket error:', event);
+      setStatus('disconnected');
+      setIsConnected(false);
+      const errorMsg = 'WebSocket connection error';
+      setError(errorMsg);
+      if (options.onError) {
+        options.onError(errorMsg);
+      }
+    };
+
+    ws.onclose = () => {
+      console.log('🔌 Disconnected from backend');
+      setStatus('disconnected');
+      setIsConnected(false);
+    };
+
+    // Audio context setup
+    if (!audioContextRef.current) {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      audioContextRef.current = new AudioContextClass({ sampleRate: 24000 });
+    }
+  }, [options, playAudioQueue]);
+
+  const disconnect = useCallback(() => {
+    console.log('🔌 [useWebSocket] disconnect() called');
+    if (wsRef.current) {
+      console.log(`🔌 [useWebSocket] Closing WebSocket (readyState: ${wsRef.current.readyState})`);
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+    setStatus('disconnected');
+    setIsConnected(false);
+  }, []);
+
   const sendAudioChunk = useCallback((audioData: string) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({
@@ -138,23 +223,38 @@ export function useWebSocket() {
   const startStreaming = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'start_streaming' }));
+      console.log('📤 Start streaming requested');
     }
   }, []);
 
   const stopStreaming = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'stop_streaming' }));
+      console.log('📤 Stop streaming requested');
     }
   }, []);
 
-  // 🆕 VAD 모드 변경 함수
-  const setVADMode = useCallback((mode: 'auto' | 'manual') => {
+  const setVadMode = useCallback((vadMode: 'server_vad' | 'none') => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({
         type: 'set_vad_mode',
-        mode
+        mode: vadMode
       }));
-      console.log(`📤 VAD mode change requested: ${mode}`);
+      console.log(`📤 VAD mode change requested: ${vadMode}`);
+    } else {
+      console.warn('⚠️ Cannot set VAD mode: WebSocket not connected');
+    }
+  }, []);
+
+  const sendTextMessage = useCallback((text: string) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        type: 'send_text',
+        text
+      }));
+      console.log(`📤 [useWebSocket] Sending text message: ${text}`);
+    } else {
+      console.warn('⚠️ Cannot send text: WebSocket not connected');
     }
   }, []);
 
@@ -162,10 +262,14 @@ export function useWebSocket() {
     status,
     transcripts,
     isConnected,
+    error,
+    connect,
+    disconnect,
     sendAudioChunk,
     startStreaming,
     stopStreaming,
-    setVADMode  // 🆕 추가
+    setVadMode,
+    sendTextMessage
   };
 }
 

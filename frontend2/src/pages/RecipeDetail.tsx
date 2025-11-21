@@ -78,9 +78,17 @@ export function RecipeDetail() {
       <Navbar />
       <div className="container mb-5">
         {/* 뒤로 가기 버튼 */}
-        <button className="btn btn-outline-secondary mb-3" onClick={() => navigate('/')}>
-          ← 목록으로
-        </button>
+        <div className="d-flex justify-content-between align-items-center mb-3">
+          <button className="btn btn-outline-secondary" onClick={() => navigate('/')}>
+            ← 목록으로
+          </button>
+          <button
+            className="btn btn-primary btn-lg"
+            onClick={() => navigate(`/cooking/${recipe.recipe_id}`)}
+          >
+            🍳 요리 시작
+          </button>
+        </div>
 
         {/* 제목 */}
         <div className="card mb-4">

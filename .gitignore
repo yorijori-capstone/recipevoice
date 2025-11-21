@@ -280,7 +280,10 @@ $RECYCLE.BIN/
 
 # Frontend dependencies and build output
 frontend/node_modules/
+frontend2/node_modules/
 frontend/dist/
+backend/node_modules/
+planning_server_ts/node_modules/
 
 # Test data
 voice/test/*.wav

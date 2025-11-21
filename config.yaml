@@ -5,10 +5,7 @@ embedding:
 faiss:
   index_type: flat_ip
   top_k: 8
-  score_threshold: 0.7
-kakao_api:
-  rest_api_key: ${KAKAO_REST_API_KEY}
-  search_limit: 5
+  score_threshold: 0.7py
 paths:
   raw_data_dir: ./data/storage/raw_data
   preprocessed_dir: ./data/storage/preprocessed_data
