@@ -1,0 +1,16 @@
+database:
+  host: localhost
+  port: 5432
+  name: recipe_db
+  user: postgres
+  password: yorijori
+
+paths:
+  faiss_index_path: storage/faiss.index
+
+embedding:
+  model: intfloat/multilingual-e5-base
+
+faiss:
+  top_k: 5
+  score_threshold: 0.45
