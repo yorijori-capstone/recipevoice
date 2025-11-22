@@ -5,23 +5,35 @@
 
 ---
 
-## 1️⃣ 데이터베이스 복원 (1분)
+## 1️⃣ 데이터베이스 복원 (2분)
 
 ```bash
-# PostgreSQL 데이터베이스 생성
+# 1) PostgreSQL 데이터베이스 생성
+psql -U postgres -c "DROP DATABASE IF EXISTS \"recipe-db\";"
 psql -U postgres -c "CREATE DATABASE \"recipe-db\";"
 
-# dump 파일로 전체 복원
-cd last_project
-pg_restore -U postgres -d "recipe-db" db_dumps/recipe_db_backup.dump
+# 2) dump 파일을 평문 SQL로 변환
+pg_restore -f dump.sql db_dumps/recipe_db_backup.dump
+
+# 3) transaction_timeout 라인 제거 (PostgreSQL 버전 호환성)
+sed -i '' '/transaction_timeout/d' dump.sql
+# Linux 사용 시: sed -i '/transaction_timeout/d' dump.sql
+
+# 4) SQL 파일을 데이터베이스에 적용
+psql -U postgres -d recipe-db -f dump.sql
 ```
 
 **확인:**
 
 ```bash
-psql -U postgres -d "recipe-db" -c "SELECT COUNT(*) FROM cleaned_recipes;"
-# 결과: 102 (Planning 완료된 레시피)
+psql -U postgres -d recipe-db -c "\dt"
+# 7개 테이블 확인: cleaned_recipes, cleaned_steps, cooking_sessions, ingredients, recipes, session_states, steps
+
+psql -U postgres -d recipe-db -c "SELECT COUNT(*) FROM cleaned_recipes;"
+# 결과: 103 (Planning 완료된 레시피)
 ```
+
+> **참고**: `transaction_timeout` 은 PostgreSQL 14+ 전용 설정이지만, 클라이언트 버전 차이로 오류가 발생할 수 있습니다. 위 방법은 이를 우회하여 안전하게 복원합니다.
 
 ---
 
