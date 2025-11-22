@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Navbar } from '../components/Navbar';
 import { RecipeCard } from '../components/RecipeCard';
 import { RecipeGenerateModal } from '../components/RecipeGenerateModal';
 
@@ -157,217 +156,309 @@ export function DashboardV3() {
   };
 
   return (
-    <>
-      <Navbar />
-      <div className="container">
-        <div className="text-center mb-4">
-          <h1 className="display-4">레시피 모음</h1>
-          <p className="text-muted">
-            {isSearching
-              ? `"${searchQuery}" 검색 결과: ${displayTotal}개`
-              : `총 ${total}개의 레시피`}
-          </p>
-        </div>
-
-        {/* Search Bar */}
-        <div className="row justify-content-center mb-4">
-          <div className="col-md-8">
-            <div className="input-group input-group-lg">
-              <input
-                type="text"
-                className="form-control"
-                placeholder="레시피 검색... (예: 김치, 찌개, 볶음)"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={handleKeyDown}
-              />
-              <button
-                className="btn btn-primary"
-                type="button"
-                onClick={handleSearch}
-                disabled={loading}
-              >
-                {loading ? (
-                  <>
-                    <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                    검색 중...
-                  </>
-                ) : (
-                  <>🔍 검색</>
-                )}
-              </button>
-              {isSearching && (
-                <button className="btn btn-outline-secondary" type="button" onClick={clearSearch}>
-                  초기화
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* AI Recipe Generation Button */}
-        <div className="d-flex justify-content-center mb-4">
-          <button className="btn btn-success btn-lg" onClick={() => setShowGenerateModal(true)}>
-            🤖 AI로 새 레시피 생성하기
-          </button>
-        </div>
-
-        <section className="my-5">
-          {loading ? (
-            <div className="text-center py-5">
-              <div
-                className="spinner-border text-primary"
-                role="status"
-                style={{ width: '3rem', height: '3rem' }}
-              >
-                <span className="visually-hidden">Loading...</span>
-              </div>
-              <p className="mt-3 text-muted">레시피를 불러오는 중...</p>
-            </div>
-          ) : isSearching && !hasSearchResults ? (
-            // No search results - suggest AI generation
-            <div className="text-center py-5">
-              <div className="alert alert-warning d-inline-block" role="alert">
-                <h4 className="alert-heading">😔 검색 결과가 없습니다</h4>
-                <p className="mb-3">
-                  "<strong>{searchQuery}</strong>" 레시피를 찾을 수 없습니다.
-                </p>
-                <hr />
-                <p className="mb-3">💡 원하는 레시피가 없나요?</p>
-                <p className="mb-4">AI가 맞춤 레시피를 만들어드릴게요!</p>
-                <button className="btn btn-success btn-lg" onClick={handleCreateWithAI}>
-                  ✨ AI로 "{searchQuery}" 레시피 만들기
-                </button>
-              </div>
-            </div>
-          ) : displayRecipes.length === 0 ? (
-            <div className="text-center py-5">
-              <p className="text-muted fs-5">레시피가 없습니다.</p>
-            </div>
-          ) : (
-            <>
-              {/* Current page info */}
-              {!isSearching && (
-                <div className="d-flex justify-content-between align-items-center mb-3">
-                  <p className="text-muted mb-0">
-                    {(page - 1) * limit + 1} - {Math.min(page * limit, total)} / {total}개 표시 중
-                  </p>
-                  <p className="text-muted mb-0">
-                    페이지 {page} / {totalPages}
-                  </p>
-                </div>
-              )}
-
-              {/* Recipe grid */}
-              <div className="row">
-                {displayRecipes.map((recipe) => (
-                  <div className="col-lg-4 col-md-6 mb-4" key={recipe.recipeId}>
-                    <RecipeCard
-                      id={recipe.id}
-                      recipe_id={recipe.recipeId}
-                      title={recipe.title}
-                      cookTime={recipe.cookTime || ''}
-                      difficulty={recipe.difficulty || ''}
-                      servings={recipe.servings || ''}
-                      onDelete={() => {
-                        // Refresh the list after deletion
-                        if (isSearching) {
-                          handleSearch();
-                        } else {
-                          fetchAllRecipes();
-                        }
-                      }}
-                    />
-                  </div>
-                ))}
-              </div>
-
-              {/* Pagination - only show when not searching */}
-              {!isSearching && totalPages > 1 && (
-                <nav aria-label="레시피 페이지네이션" className="mt-5">
-                  <ul className="pagination justify-content-center">
-                    <li className={`page-item ${page === 1 ? 'disabled' : ''}`}>
-                      <button
-                        className="page-link"
-                        onClick={() => setPage(1)}
-                        disabled={page === 1}
-                        aria-label="처음"
-                      >
-                        <span aria-hidden="true">&laquo;</span>
-                      </button>
-                    </li>
-
-                    <li className={`page-item ${page === 1 ? 'disabled' : ''}`}>
-                      <button
-                        className="page-link"
-                        onClick={() => setPage(page - 1)}
-                        disabled={page === 1}
-                        aria-label="이전"
-                      >
-                        <span aria-hidden="true">&lsaquo;</span>
-                      </button>
-                    </li>
-
-                    {page > 3 && (
-                      <li className="page-item disabled">
-                        <span className="page-link">...</span>
-                      </li>
-                    )}
-
-                    {getPageNumbers().map((pageNum) => (
-                      <li key={pageNum} className={`page-item ${page === pageNum ? 'active' : ''}`}>
-                        <button className="page-link" onClick={() => setPage(pageNum)}>
-                          {pageNum}
-                        </button>
-                      </li>
-                    ))}
-
-                    {page < totalPages - 2 && (
-                      <li className="page-item disabled">
-                        <span className="page-link">...</span>
-                      </li>
-                    )}
-
-                    <li className={`page-item ${page === totalPages ? 'disabled' : ''}`}>
-                      <button
-                        className="page-link"
-                        onClick={() => setPage(page + 1)}
-                        disabled={page === totalPages}
-                        aria-label="다음"
-                      >
-                        <span aria-hidden="true">&rsaquo;</span>
-                      </button>
-                    </li>
-
-                    <li className={`page-item ${page === totalPages ? 'disabled' : ''}`}>
-                      <button
-                        className="page-link"
-                        onClick={() => setPage(totalPages)}
-                        disabled={page === totalPages}
-                        aria-label="마지막"
-                      >
-                        <span aria-hidden="true">&raquo;</span>
-                      </button>
-                    </li>
-                  </ul>
-                </nav>
-              )}
-            </>
-          )}
-        </section>
+    <div className="container" style={{ padding: 'var(--spacing-4)' }}>
+      <div className="text-center mb-5" style={{ marginTop: 'var(--spacing-6)' }}>
+        <h1
+          className="display-4 mb-3"
+          style={{
+            fontWeight: 'var(--font-weight-bold)',
+            background: 'linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            backgroundClip: 'text',
+          }}
+        >
+          레시피 모음
+        </h1>
+        <p className="text-muted" style={{ fontSize: 'var(--font-size-lg)' }}>
+          {isSearching
+            ? `"${searchQuery}" 검색 결과: ${displayTotal}개`
+            : `총 ${total}개의 레시피`}
+        </p>
       </div>
 
-      {/* Recipe Generate Modal */}
-      {showGenerateModal && (
-        <RecipeGenerateModal
-          onClose={() => {
-            setShowGenerateModal(false);
-            setInitialPrompt('');
+      {/* Search Bar */}
+      <div className="row justify-content-center mb-5">
+        <div className="col-12">
+          <div
+            className="input-group input-group-lg"
+            style={{
+              boxShadow: 'var(--shadow-lg)',
+              borderRadius: 'var(--radius-lg)',
+              overflow: 'hidden',
+            }}
+          >
+            <input
+              type="text"
+              className="form-control"
+              placeholder="레시피 검색... (예: 김치, 찌개, 볶음)"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={handleKeyDown}
+              style={{
+                border: 'none',
+                padding: 'var(--spacing-4) var(--spacing-5)',
+                fontSize: 'var(--font-size-lg)',
+                borderRight: '1px solid var(--color-border-light)',
+              }}
+            />
+            <button
+              className="btn btn-primary"
+              type="button"
+              onClick={handleSearch}
+              disabled={loading}
+              style={{
+                padding: 'var(--spacing-4) var(--spacing-6)',
+                fontWeight: 'var(--font-weight-medium)',
+                fontSize: 'var(--font-size-base)',
+                border: 'none',
+              }}
+            >
+              {loading ? (
+                <>
+                  <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                  검색 중...
+                </>
+              ) : (
+                <>🔍 검색</>
+              )}
+            </button>
+            {isSearching && (
+              <button
+                className="btn btn-outline-secondary"
+                type="button"
+                onClick={clearSearch}
+                style={{
+                  padding: 'var(--spacing-4) var(--spacing-5)',
+                  fontWeight: 'var(--font-weight-medium)',
+                  border: 'none',
+                  borderLeft: '1px solid var(--color-border-light)',
+                }}
+              >
+                초기화
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* AI Recipe Generation Button */}
+      <div className="d-flex justify-content-center mb-5">
+        <button
+          className="btn btn-success btn-lg"
+          onClick={() => setShowGenerateModal(true)}
+          style={{
+            background: 'var(--color-primary)',
+            border: 'none',
+            borderRadius: 'var(--radius-lg)',
+            padding: 'var(--spacing-4) var(--spacing-8)',
+            fontWeight: 'var(--font-weight-bold)',
+            fontSize: 'var(--font-size-lg)',
+            boxShadow: 'var(--shadow-lg)',
+            transition: 'all var(--transition-base)',
           }}
-          onRecipeGenerated={handleRecipeGenerated}
-          initialPrompt={initialPrompt}
-        />
-      )}
-    </>
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = 'translateY(-2px)';
+            e.currentTarget.style.boxShadow = 'var(--shadow-xl)';
+            e.currentTarget.style.background = 'var(--color-primary-dark)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = 'var(--shadow-lg)';
+            e.currentTarget.style.background = 'var(--color-primary)';
+          }}
+        >
+          ✨ AI로 새 레시피 생성하기
+        </button>
+      </div>
+
+      <section className="my-5">
+        {loading ? (
+          <div className="text-center py-5">
+            <div
+              className="spinner-border"
+              role="status"
+              style={{
+                width: '3rem',
+                height: '3rem',
+                color: 'var(--color-primary)',
+                borderWidth: '4px',
+              }}
+            >
+              <span className="visually-hidden">Loading...</span>
+            </div>
+            <p className="mt-4 text-muted" style={{ fontSize: 'var(--font-size-lg)' }}>
+              레시피를 불러오는 중...
+            </p>
+          </div>
+        ) : isSearching && !hasSearchResults ? (
+          // No search results - suggest AI generation
+          <div className="text-center py-5">
+            <div
+              className="alert d-inline-block"
+              role="alert"
+              style={{
+                background: 'linear-gradient(135deg, rgba(255, 217, 61, 0.1) 0%, rgba(255, 217, 61, 0.05) 100%)',
+                border: '2px solid var(--color-accent)',
+                borderRadius: 'var(--radius-lg)',
+                padding: 'var(--spacing-8)',
+                maxWidth: '600px',
+              }}
+            >
+              <h4 className="alert-heading" style={{ fontSize: 'var(--font-size-2xl)' }}>
+                😔 검색 결과가 없습니다
+              </h4>
+              <p className="mb-3" style={{ fontSize: 'var(--font-size-lg)' }}>
+                "<strong>{searchQuery}</strong>" 레시피를 찾을 수 없습니다.
+              </p>
+              <hr style={{ borderColor: 'var(--color-accent)', opacity: 0.3 }} />
+              <p className="mb-3" style={{ fontSize: 'var(--font-size-lg)' }}>
+                💡 원하는 레시피가 없나요?
+              </p>
+              <p className="mb-4" style={{ fontSize: 'var(--font-size-base)' }}>
+                AI가 맞춤 레시피를 만들어드릴게요!
+              </p>
+              <button
+                className="btn btn-success btn-lg"
+                onClick={handleCreateWithAI}
+                style={{
+                  background: 'var(--color-primary)',
+                  border: 'none',
+                  borderRadius: 'var(--radius-md)',
+                  padding: 'var(--spacing-3) var(--spacing-6)',
+                  fontWeight: 'var(--font-weight-bold)',
+                }}
+              >
+                ✨ AI로 "{searchQuery}" 레시피 만들기
+              </button>
+            </div>
+          </div>
+        ) : displayRecipes.length === 0 ? (
+          <div className="text-center py-5">
+            <p className="text-muted fs-5">레시피가 없습니다.</p>
+          </div>
+        ) : (
+          <>
+            {/* Current page info */}
+            {!isSearching && (
+              <div className="d-flex justify-content-between align-items-center mb-4">
+                <p className="text-muted mb-0" style={{ fontSize: 'var(--font-size-sm)' }}>
+                  {(page - 1) * limit + 1} - {Math.min(page * limit, total)} / {total}개 표시 중
+                </p>
+                <p className="text-muted mb-0" style={{ fontSize: 'var(--font-size-sm)' }}>
+                  페이지 {page} / {totalPages}
+                </p>
+              </div>
+            )}
+
+            {/* Recipe grid with stagger animation */}
+            <div className="row stagger-animation">
+              {displayRecipes.map((recipe) => (
+                <div className="col-12 mb-4" key={recipe.recipeId}>
+                  <RecipeCard
+                    id={recipe.id}
+                    recipe_id={recipe.recipeId}
+                    title={recipe.title}
+                    cookTime={recipe.cookTime || ''}
+                    difficulty={recipe.difficulty || ''}
+                    servings={recipe.servings || ''}
+                    onDelete={() => {
+                      // Refresh the list after deletion
+                      if (isSearching) {
+                        handleSearch();
+                      } else {
+                        fetchAllRecipes();
+                      }
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+
+            {/* Pagination - only show when not searching */}
+            {!isSearching && totalPages > 1 && (
+              <nav aria-label="레시피 페이지네이션" className="mt-5">
+                <ul className="pagination justify-content-center">
+                  <li className={`page-item ${page === 1 ? 'disabled' : ''}`}>
+                    <button
+                      className="page-link"
+                      onClick={() => setPage(1)}
+                      disabled={page === 1}
+                      aria-label="처음"
+                    >
+                      <span aria-hidden="true">&laquo;</span>
+                    </button>
+                  </li>
+
+                  <li className={`page-item ${page === 1 ? 'disabled' : ''}`}>
+                    <button
+                      className="page-link"
+                      onClick={() => setPage(page - 1)}
+                      disabled={page === 1}
+                      aria-label="이전"
+                    >
+                      <span aria-hidden="true">&lsaquo;</span>
+                    </button>
+                  </li>
+
+                  {page > 3 && (
+                    <li className="page-item disabled">
+                      <span className="page-link">...</span>
+                    </li>
+                  )}
+
+                  {getPageNumbers().map((pageNum) => (
+                    <li key={pageNum} className={`page-item ${page === pageNum ? 'active' : ''}`}>
+                      <button className="page-link" onClick={() => setPage(pageNum)}>
+                        {pageNum}
+                      </button>
+                    </li>
+                  ))}
+
+                  {page < totalPages - 2 && (
+                    <li className="page-item disabled">
+                      <span className="page-link">...</span>
+                    </li>
+                  )}
+
+                  <li className={`page-item ${page === totalPages ? 'disabled' : ''}`}>
+                    <button
+                      className="page-link"
+                      onClick={() => setPage(page + 1)}
+                      disabled={page === totalPages}
+                      aria-label="다음"
+                    >
+                      <span aria-hidden="true">&rsaquo;</span>
+                    </button>
+                  </li>
+
+                  <li className={`page-item ${page === totalPages ? 'disabled' : ''}`}>
+                    <button
+                      className="page-link"
+                      onClick={() => setPage(totalPages)}
+                      disabled={page === totalPages}
+                      aria-label="마지막"
+                    >
+                      <span aria-hidden="true">&raquo;</span>
+                    </button>
+                  </li>
+                </ul>
+              </nav>
+            )}
+          </>
+        )}
+        {/* Recipe Generate Modal */}
+        {showGenerateModal && (
+          <RecipeGenerateModal
+            onClose={() => {
+              setShowGenerateModal(false);
+              setInitialPrompt('');
+            }}
+            onRecipeGenerated={handleRecipeGenerated}
+            initialPrompt={initialPrompt}
+          />
+        )}
+      </section>
+    </div>
   );
 }

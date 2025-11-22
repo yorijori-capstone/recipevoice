@@ -4,18 +4,32 @@ import { DashboardV3 } from "./pages/DashboardV3";
 import { RecipeDetail } from "./pages/RecipeDetail";
 import { CookingMode } from "./pages/CookingMode";
 import VoiceTest from "./pages/VoiceTest";
+import { Navbar } from "./components/Navbar";
 
 function App() {
 
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<DashboardV3 />} />
-        <Route path="/v1" element={<Dashboard />} />
-        <Route path="/recipe/:id" element={<RecipeDetail />} />
-        <Route path="/cooking/:recipeId" element={<CookingMode />} />
-        <Route path="/voice-test" element={<VoiceTest />} />
-      </Routes>
+      {/* Mobile App Container */}
+      <div
+        style={{
+          maxWidth: '480px',
+          margin: '0 auto',
+          minHeight: '100vh',
+          boxShadow: '0 0 50px rgba(0, 0, 0, 0.1)',
+          background: 'var(--color-surface)',
+          position: 'relative',
+        }}
+      >
+        <Navbar />
+        <Routes>
+          <Route path="/" element={<DashboardV3 />} />
+          <Route path="/v1" element={<Dashboard />} />
+          <Route path="/recipe/:id" element={<RecipeDetail />} />
+          <Route path="/cooking/:recipeId" element={<CookingMode />} />
+          <Route path="/voice-test" element={<VoiceTest />} />
+        </Routes>
+      </div>
     </BrowserRouter>
   )
 }
