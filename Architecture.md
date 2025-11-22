@@ -247,7 +247,7 @@ backend/src/
 ### Frontend
 
 ```
-frontend2/src/
+frontend/src/
 ├── pages/
 │   ├── Dashboard.tsx                # V1 (Legacy, /v1 경로)
 │   ├── DashboardV2.tsx              # ✨ V2: 검색 + AI 생성
@@ -625,7 +625,7 @@ npm run dev:v2
 
 **Terminal 2 - Frontend**:
 ```bash
-cd frontend2
+cd frontend
 npm run dev
 # → http://localhost:5173
 ```
@@ -639,7 +639,7 @@ npm run build
 npm run start:v2
 
 # Frontend
-cd frontend2
+cd frontend
 npm run build
 npm run preview
 ```

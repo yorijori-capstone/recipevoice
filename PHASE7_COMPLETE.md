@@ -65,7 +65,7 @@ Phase 7에서는 기존 음성 상호작용 기능을 ServerV2로 업그레이�
 
 ## 📝 Code Changes
 
-### 1. useWebSocket Hook (`frontend2/src/hooks/useWebSocket.ts`)
+### 1. useWebSocket Hook (`frontend/src/hooks/useWebSocket.ts`)
 
 #### Added V2 Event Handler Interfaces
 
@@ -114,7 +114,7 @@ switch (data.type) {
 
 ---
 
-### 2. VoiceInteraction Component (`frontend2/src/components/CookingUI/VoiceInteraction.tsx`)
+### 2. VoiceInteraction Component (`frontend/src/components/CookingUI/VoiceInteraction.tsx`)
 
 #### Added V2 Props
 
@@ -169,7 +169,7 @@ const { isConnected, error: wsError, ... } = useWebSocket({
 
 ---
 
-### 3. CookingMode Component (`frontend2/src/pages/CookingMode.tsx`)
+### 3. CookingMode Component (`frontend/src/pages/CookingMode.tsx`)
 
 #### Added V2 Event Handlers
 
@@ -290,7 +290,7 @@ const executionResult = await this.executeIntent(sessionId, intentResult);
 
 **Setup**:
 1. Start backend V2: `cd backend && npm run dev:v2`
-2. Start frontend: `cd frontend2 && npm run dev`
+2. Start frontend: `cd frontend && npm run dev`
 3. 레시피 선택 → CookingMode 진입
 4. 음성 모드: **자동 모드** 선택
 
@@ -466,7 +466,7 @@ if (lowerText.includes('다음') || lowerText.includes('next')) {
 ### Modified Files
 
 ```
-frontend2/src/
+frontend/src/
 ├── hooks/
 │   └── useWebSocket.ts                 🔧 V2 이벤트 핸들러 추가
 ├── components/CookingUI/
@@ -494,7 +494,7 @@ npm run dev:v2
 
 **Terminal 2 - Frontend**:
 ```bash
-cd frontend2
+cd frontend
 npm run dev
 # Frontend running on port 5173
 ```

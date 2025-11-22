@@ -6,8 +6,8 @@ GPT-4o Realtime API를 활용한 실시간 음성 요리 가이드 시스템
 
 ```bash
 # 1. PostgreSQL 데이터베이스 생성 및 복원
-psql -U postgres -c "CREATE DATABASE yorijori"
-psql -U postgres -d yorijori < db_dumps/yorijori_full_backup.sql
+psql -U postgres -c "CREATE DATABASE \"recipe-db\""
+psql -U postgres -d "recipe-db" < db_dumps/yorijori_full_backup.sql
 
 # 2. Backend 실행
 cd backend
@@ -15,7 +15,7 @@ npm install
 npm run dev
 
 # 3. Frontend 실행 (새 터미널)
-cd frontend2
+cd frontend
 npm install
 npm run dev
 ```
@@ -87,7 +87,7 @@ cd backend
 npm run dev
 
 # Frontend 개발 서버
-cd frontend2
+cd frontend
 npm run dev
 
 # Backend 빌드
@@ -95,7 +95,7 @@ cd backend
 npm run build
 
 # Frontend 빌드
-cd frontend2
+cd frontend
 npm run build
 
 # Planning 실행 (처음 1회만, 50분 소요)
@@ -117,10 +117,10 @@ npm run clean:all
 ### 데이터 복원:
 ```bash
 # 전체 DB 복원 (추천)
-psql -U postgres -d yorijori < db_dumps/yorijori_full_backup.sql
+psql -U postgres -d "recipe-db" < db_dumps/yorijori_full_backup.sql
 
 # 스키마만 생성
-psql -U postgres -d yorijori -f backend/schema.sql
+psql -U postgres -d "recipe-db" -f backend/schema.sql
 ```
 
 ## 🎯 사용 방법
@@ -145,7 +145,7 @@ psql -U postgres -d yorijori -f backend/schema.sql
 ### Backend (.env)
 ```env
 OPENAI_API_KEY=your_openai_api_key
-DATABASE_URL=postgresql://postgres:password@localhost:5432/yorijori
+DATABASE_URL=postgresql://postgres:password@localhost:5432/recipe-db
 PORT=3001
 NODE_ENV=development
 ```
@@ -200,10 +200,14 @@ brew services start postgresql
 - Backend 서버가 실행 중인지 확인
 - 포트 3001이 사용 가능한지 확인
 
+### "API 404 Not Found"
+- `/recipes` 엔드포인트를 사용 중인지 확인 (NOT `/api/recipes`)
+- Backend가 3001 포트에서 실행 중인지 확인
+
 ### Planning 데이터 없음
 ```bash
 # DB 덤프 복원 또는
-psql -U postgres -d yorijori < db_dumps/yorijori_full_backup.sql
+psql -U postgres -d "recipe-db" < db_dumps/yorijori_full_backup.sql
 
 # Planning 실행 (50분 소요)
 npm run clean:all

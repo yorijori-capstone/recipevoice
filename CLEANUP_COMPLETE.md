@@ -203,7 +203,7 @@ npm run dev
 
 ### 2. Frontend 실행:
 ```bash
-cd frontend2
+cd frontend
 npm run dev
 ```
 

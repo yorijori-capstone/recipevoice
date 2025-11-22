@@ -108,7 +108,7 @@ last_project/
 │   └── scripts/
 │       └── batch-clean-recipes.ts
 │
-├── frontend2/
+├── frontend/
 │   └── src/
 │       ├── pages/
 │       │   ├── Dashboard.tsx           (V1)
@@ -259,7 +259,7 @@ npm run dev:v2
 ### 2. Frontend Setup
 
 ```bash
-cd frontend2
+cd frontend
 
 # Install dependencies
 npm install

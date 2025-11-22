@@ -314,7 +314,7 @@ npm run dev:v2
 
 ### Start Frontend
 ```bash
-cd frontend2
+cd frontend
 npm run dev
 # Frontend running on port 5173
 ```

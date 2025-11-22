@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/serverV2.ts",
+    "dev": "tsx watch src/server.ts",
     "build": "tsc",
-    "start": "node dist/serverV2.js",
+    "start": "node dist/server.js",
     "import": "tsx scripts/import-recipes.ts",
     "db:init": "psql -U postgres -f scripts/init-db.sql",
     "clean:all": "tsx scripts/batch-clean-recipes.ts"

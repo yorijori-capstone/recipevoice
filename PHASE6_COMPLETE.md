@@ -375,7 +375,7 @@ npm run build
 
 ### New Files
 ```
-frontend2/src/
+frontend/src/
 ├── pages/
 │   └── DashboardV2.tsx               ✨ NEW (검색 + AI 생성 통합)
 └── hooks/
@@ -384,7 +384,7 @@ frontend2/src/
 
 ### Modified Files
 ```
-frontend2/src/
+frontend/src/
 ├── App.tsx                            🔧 Routes 업데이트
 └── components/
     └── RecipeGenerateModal.tsx        🔧 initialPrompt prop 추가
@@ -409,7 +409,7 @@ npm run dev:v2
 
 **Terminal 2 - Frontend**:
 ```bash
-cd frontend2
+cd frontend
 npm run dev
 # Frontend running on port 5173
 ```

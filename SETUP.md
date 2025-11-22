@@ -1,30 +1,8 @@
 # 요리조리(Yorijori) V2 개발 환경 설정 가이드
 
-## ⚡ 빠른 시작 (권장)
+## ⚡ 빠른 시작
 
-협업 개발자라면 이 방법으로 5분 안에 시작하세요!
-
-```bash
-# 1. PostgreSQL 데이터베이스 생성
-psql -U postgres -c "CREATE DATABASE yorijori"
-
-# 2. SQL 덤프 파일로 전체 데이터 복원
-psql -U postgres -d yorijori < db_dumps/yorijori_full_backup.sql
-
-# 3. Backend 의존성 설치 및 실행
-cd backend
-npm install
-npm run dev
-
-# 4. Frontend 의존성 설치 및 실행 (새 터미널)
-cd frontend2
-npm install
-npm run dev
-```
-
-**완료!** http://localhost:5173 에서 바로 사용 가능합니다.
-
----
+`README.md`의 [빠른 시작 가이드](README.md#⚡-빠른-시작-5분)를 참고하세요.
 
 ## 1. 사전 요구사항
 
@@ -45,7 +23,7 @@ cd backend
 npm install
 
 # Frontend 의존성 설치
-cd ../frontend2
+cd ../frontend
 npm install
 ```
 
@@ -59,29 +37,29 @@ npm install
 # 1. 데이터베이스 생성
 psql -U postgres
 
-postgres=# CREATE DATABASE yorijori;
+postgres=# CREATE DATABASE "recipe-db";
 postgres=# \q
 
 # 2. SQL 덤프 파일로 전체 복원 (스키마 + 데이터)
 cd last_project
-psql -U postgres -d yorijori < db_dumps/yorijori_full_backup.sql
+psql -U postgres -d "recipe-db" < db_dumps/yorijori_full_backup.sql
 
 # 3. 복원 확인
-psql -U postgres -d yorijori
+psql -U postgres -d "recipe-db"
 
-yorijori=# SELECT COUNT(*) FROM recipes;
+recipe-db=# SELECT COUNT(*) FROM recipes;
  count
 -------
    102
 (1 row)
 
-yorijori=# SELECT COUNT(*) FROM cleaned_recipes;
+recipe-db=# SELECT COUNT(*) FROM cleaned_recipes;
  count
 -------
    102
 (1 row)
 
-yorijori=# \q
+recipe-db=# \q
 ```
 
 **완료!** 이제 바로 서버를 실행할 수 있습니다.
@@ -99,10 +77,10 @@ yorijori=# \q
 psql -U postgres
 
 # 데이터베이스 생성
-CREATE DATABASE yorijori;
+CREATE DATABASE "recipe-db";
 
 # 연결 확인
-\c yorijori
+\c "recipe-db"
 \q
 ```
 
@@ -111,7 +89,7 @@ CREATE DATABASE yorijori;
 ```bash
 # backend 디렉토리에서 실행
 cd backend
-psql -U postgres -d yorijori -f schema.sql
+psql -U postgres -d "recipe-db" -f schema.sql
 ```
 
 #### 3-3. 원본 레시피 Import + Planning 실행
@@ -138,7 +116,7 @@ npm run clean:all
 
 ```bash
 # 전체 데이터베이스 덤프 생성
-pg_dump -U postgres -d yorijori > db_dumps/yorijori_full_backup.sql
+pg_dump -U postgres -d "recipe-db" > db_dumps/yorijori_full_backup.sql
 
 # Git에 추가
 git add db_dumps/yorijori_full_backup.sql
@@ -150,17 +128,17 @@ git push
 
 ```bash
 # Binary 덤프 생성 (압축됨)
-pg_dump -U postgres -d yorijori -F c -f db_dumps/yorijori_backup.dump
+pg_dump -U postgres -d "recipe-db" -F c -f db_dumps/yorijori_backup.dump
 
 # 복원 방법 (팀원):
-pg_restore -U postgres -d yorijori -c db_dumps/yorijori_backup.dump
+pg_restore -U postgres -d "recipe-db" -c db_dumps/yorijori_backup.dump
 ```
 
 ### Planning 결과만 공유 (가벼움)
 
 ```bash
 # cleaned_recipes + cleaned_steps만 덤프
-pg_dump -U postgres -d yorijori \
+pg_dump -U postgres -d "recipe-db" \
   -t cleaned_recipes \
   -t cleaned_steps \
   -t recipes \
@@ -169,8 +147,8 @@ pg_dump -U postgres -d yorijori \
   > db_dumps/cleaned_recipes_only.sql
 
 # 팀원 복원:
-psql -U postgres -d yorijori -f schema.sql
-psql -U postgres -d yorijori < db_dumps/cleaned_recipes_only.sql
+psql -U postgres -d "recipe-db" -f schema.sql
+psql -U postgres -d "recipe-db" < db_dumps/cleaned_recipes_only.sql
 ```
 
 ## 4. 환경 변수 설정
@@ -184,7 +162,7 @@ psql -U postgres -d yorijori < db_dumps/cleaned_recipes_only.sql
 OPENAI_API_KEY=your_openai_api_key_here
 
 # Database
-DATABASE_URL=postgresql://postgres:your_password@localhost:5432/yorijori
+DATABASE_URL=postgresql://postgres:your_password@localhost:5432/recipe-db
 
 # Server
 PORT=3001
@@ -196,7 +174,7 @@ MCP_ENABLED=false
 
 ### Frontend 설정
 
-`frontend2/.env` 파일 생성:
+`frontend/.env` 파일 생성:
 
 ```env
 VITE_API_URL=http://localhost:3001
@@ -208,7 +186,7 @@ VITE_WS_URL=ws://localhost:3001
 
 ```bash
 # PostgreSQL 접속
-psql -U postgres -d yorijori
+psql -U postgres -d "recipe-db"
 
 # 테이블 확인
 \dt
@@ -261,7 +239,7 @@ npm start
 ### Frontend 서버 (Terminal 2)
 
 ```bash
-cd frontend2
+cd frontend
 
 # 개발 모드
 npm run dev
@@ -382,7 +360,7 @@ echo "!db_dumps/*.sql" >> .gitignore
 
 # SQL 덤프 생성
 mkdir -p db_dumps
-pg_dump -U postgres -d yorijori --data-only -t cleaned_recipes -t cleaned_steps > db_dumps/cleaned_data.sql
+pg_dump -U postgres -d "recipe-db" --data-only -t cleaned_recipes -t cleaned_steps > db_dumps/cleaned_data.sql
 
 # Git에 커밋
 git add db_dumps/cleaned_data.sql
@@ -396,7 +374,7 @@ git push
 
 ```env
 # 모든 팀원이 같은 DB 사용
-DATABASE_URL=postgresql://user:password@db.example.com:5432/yorijori
+DATABASE_URL=postgresql://user:password@db.example.com:5432/recipe-db
 ```
 
 장점:
@@ -415,10 +393,10 @@ git pull origin main
 
 # 2. 의존성 업데이트
 cd backend && npm install
-cd ../frontend2 && npm install
+cd ../frontend && npm install
 
 # 3. 데이터베이스 마이그레이션 (스키마 변경 시)
-psql -U postgres -d yorijori < backend/migrations/001_new_feature.sql
+psql -U postgres -d "recipe-db" < backend/migrations/001_new_feature.sql
 
 # 4. 개발 서버 실행
 npm run dev:v2  # Backend
@@ -430,11 +408,11 @@ npm run dev     # Frontend
 ```bash
 # 1. 타입 체크
 cd backend && npm run type-check
-cd ../frontend2 && npm run type-check
+cd ../frontend && npm run type-check
 
 # 2. 빌드 테스트
 cd backend && npm run build
-cd ../frontend2 && npm run build
+cd ../frontend && npm run build
 
 # 3. 커밋 & 푸시
 git add .
@@ -460,11 +438,11 @@ curl -X POST http://localhost:3001/api/recipes/generate \
   -d '{"prompt":"스테이크 레시피"}'
 
 # 데이터베이스 백업
-pg_dump -U postgres -d yorijori > backup_$(date +%Y%m%d).sql
+pg_dump -U postgres -d "recipe-db" > backup_$(date +%Y%m%d).sql
 
 # 데이터베이스 초기화 (주의!)
-psql -U postgres -d yorijori -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
-psql -U postgres -d yorijori -f backend/schema.sql
+psql -U postgres -d "recipe-db" -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+psql -U postgres -d "recipe-db" -f backend/schema.sql
 ```
 
 ## 13. 프로젝트 구조
@@ -480,7 +458,7 @@ last_project/
 │   ├── schema.sql          # DB 스키마
 │   └── package.json
 │
-├── frontend2/
+├── frontend/
 │   ├── src/
 │   │   ├── pages/          # DashboardV2, CookingMode
 │   │   ├── components/     # RecipeCard, VoiceInteraction
@@ -534,7 +512,7 @@ VITE_API_URL=http://localhost:3001
 ```env
 NODE_ENV=production
 VITE_API_URL=https://api.yorijori.com
-DATABASE_URL=postgresql://user:pass@prod-db.com:5432/yorijori
+DATABASE_URL=postgresql://user:pass@prod-db.com:5432/recipe-db
 ```
 
 ## 16. 팀원 온보딩 체크리스트
@@ -546,7 +524,7 @@ DATABASE_URL=postgresql://user:pass@prod-db.com:5432/yorijori
 - [ ] Frontend 의존성 설치 (`npm install`)
 - [ ] `.env` 파일 생성 (Backend, Frontend)
 - [ ] OpenAI API Key 발급 및 설정
-- [ ] 데이터베이스 생성 (`CREATE DATABASE yorijori`)
+- [ ] 데이터베이스 생성 (`CREATE DATABASE "recipe-db"`)
 - [ ] 스키마 생성 (`psql -f schema.sql`)
 - [ ] **데이터베이스 덤프 복원** (`pg_restore`)
 - [ ] Backend 서버 실행 (`npm run dev:v2`)
