@@ -535,7 +535,7 @@ npm run dev
 
 ## 🎉 Project Complete!
 
-**Recipe Voice Assistant (Yorijori) V2 아키텍처 마이그레이션 완료! 🎊**
+**Recipe Voice Assistant (Yorijori) V3 아키텍처 마이그레이션 완료! 🎊**
 
 **최종 완성도: 98%**
 
@@ -545,7 +545,7 @@ npm run dev
 
 1. ✅ **50-100배 빠른 시작** (5-10초 → 0.1초)
 2. ✅ **세션 복구 가능** (localStorage + DB)
-3. ✅ **AI 레시피 생성** (GPT-3.5)
+3. ✅ **AI 레시피 생성** (gpt-5-nano)
 4. ✅ **검색 기능** (Keyword)
 5. ✅ **Opening/Closing Remark** (자연스러운 대화)
 6. ✅ **LangChain 자동 Intent Detection** (음성 명령 자동 처리)

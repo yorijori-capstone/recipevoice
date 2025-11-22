@@ -6,10 +6,18 @@
 
 ```bash
 # 1. PostgreSQL 데이터베이스 생성
-psql -U postgres -c "CREATE DATABASE yorijori"
+psql -U postgres -c "CREATE DATABASE recipevoice"
+psql -U postgres -c "CREATE USER recipevoice WITH PASSWORD 'recipevoice';"
+psql -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE recipevoice TO recipevoice;"
 
-# 2. SQL 덤프 파일로 전체 데이터 복원
-psql -U postgres -d yorijori < db_dumps/yorijori_full_backup.sql
+# 2. SQL 덤프 파일로 전체 데이터 복원 (있는 경우)
+# psql -U recipevoice -d recipevoice < db_dumps/recipevoice_backup.sql
+
+# 3. 마이그레이션 실행
+psql -U recipevoice -d recipevoice -f backend/migrations/001_create_cleaned_recipes.sql
+psql -U recipevoice -d recipevoice -f backend/migrations/002_create_sessions.sql
+psql -U recipevoice -d recipevoice -f backend/migrations/004_add_raw_data_column.sql
+psql -U recipevoice -d recipevoice -f backend/migrations/005_grant_permissions.sql
 
 # 3. Backend 의존성 설치 및 실행
 cd backend
@@ -59,29 +67,37 @@ npm install
 # 1. 데이터베이스 생성
 psql -U postgres
 
-postgres=# CREATE DATABASE yorijori;
+postgres=# CREATE DATABASE recipevoice;
+postgres=# CREATE USER recipevoice WITH PASSWORD 'recipevoice';
+postgres=# GRANT ALL PRIVILEGES ON DATABASE recipevoice TO recipevoice;
 postgres=# \q
 
-# 2. SQL 덤프 파일로 전체 복원 (스키마 + 데이터)
-cd last_project
-psql -U postgres -d yorijori < db_dumps/yorijori_full_backup.sql
+# 2. SQL 덤프 파일로 전체 복원 (스키마 + 데이터, 있는 경우)
+# psql -U recipevoice -d recipevoice < db_dumps/recipevoice_backup.sql
 
-# 3. 복원 확인
-psql -U postgres -d yorijori
+# 3. 마이그레이션 실행
+cd backend
+psql -U recipevoice -d recipevoice -f migrations/001_create_cleaned_recipes.sql
+psql -U recipevoice -d recipevoice -f migrations/002_create_sessions.sql
+psql -U recipevoice -d recipevoice -f migrations/004_add_raw_data_column.sql
+psql -U recipevoice -d recipevoice -f migrations/005_grant_permissions.sql
 
-yorijori=# SELECT COUNT(*) FROM recipes;
+# 4. 복원 확인
+psql -U recipevoice -d recipevoice
+
+recipevoice=# SELECT COUNT(*) FROM recipes;
  count
 -------
    102
 (1 row)
 
-yorijori=# SELECT COUNT(*) FROM cleaned_recipes;
+recipevoice=# SELECT COUNT(*) FROM cleaned_recipes;
  count
 -------
    102
 (1 row)
 
-yorijori=# \q
+recipevoice=# \q
 ```
 
 **완료!** 이제 바로 서버를 실행할 수 있습니다.
@@ -99,10 +115,12 @@ yorijori=# \q
 psql -U postgres
 
 # 데이터베이스 생성
-CREATE DATABASE yorijori;
+CREATE DATABASE recipevoice;
+CREATE USER recipevoice WITH PASSWORD 'recipevoice';
+GRANT ALL PRIVILEGES ON DATABASE recipevoice TO recipevoice;
 
 # 연결 확인
-\c yorijori
+\c recipevoice
 \q
 ```
 
@@ -111,7 +129,13 @@ CREATE DATABASE yorijori;
 ```bash
 # backend 디렉토리에서 실행
 cd backend
-psql -U postgres -d yorijori -f schema.sql
+psql -U recipevoice -d recipevoice -f schema.sql
+
+# 마이그레이션 실행
+psql -U recipevoice -d recipevoice -f migrations/001_create_cleaned_recipes.sql
+psql -U recipevoice -d recipevoice -f migrations/002_create_sessions.sql
+psql -U recipevoice -d recipevoice -f migrations/004_add_raw_data_column.sql
+psql -U recipevoice -d recipevoice -f migrations/005_grant_permissions.sql
 ```
 
 #### 3-3. 원본 레시피 Import + Planning 실행
@@ -121,10 +145,10 @@ psql -U postgres -d yorijori -f schema.sql
 ```bash
 cd backend
 
-# 1. 원본 레시피 102개 Import
+# 1. 원본 레시피 102개 Import (raw_data 포함)
 npm run import
 
-# 2. Planning 실행 (GPT-4o-mini로 스크립트 생성)
+# 2. Planning 실행 (gpt-5-nano로 스크립트 생성)
 npm run clean:all
 ```
 
@@ -138,11 +162,11 @@ npm run clean:all
 
 ```bash
 # 전체 데이터베이스 덤프 생성
-pg_dump -U postgres -d yorijori > db_dumps/yorijori_full_backup.sql
+pg_dump -U recipevoice -d recipevoice > db_dumps/recipevoice_backup.sql
 
-# Git에 추가
-git add db_dumps/yorijori_full_backup.sql
-git commit -m "Add database dump with 102 cleaned recipes"
+# Git에 추가 (선택적 - 파일 크기 고려)
+git add db_dumps/recipevoice_backup.sql
+git commit -m "Add database dump with cleaned recipes"
 git push
 ```
 
@@ -150,17 +174,17 @@ git push
 
 ```bash
 # Binary 덤프 생성 (압축됨)
-pg_dump -U postgres -d yorijori -F c -f db_dumps/yorijori_backup.dump
+pg_dump -U recipevoice -d recipevoice -F c -f db_dumps/recipevoice_backup.dump
 
 # 복원 방법 (팀원):
-pg_restore -U postgres -d yorijori -c db_dumps/yorijori_backup.dump
+pg_restore -U recipevoice -d recipevoice -c db_dumps/recipevoice_backup.dump
 ```
 
 ### Planning 결과만 공유 (가벼움)
 
 ```bash
 # cleaned_recipes + cleaned_steps만 덤프
-pg_dump -U postgres -d yorijori \
+pg_dump -U recipevoice -d recipevoice \
   -t cleaned_recipes \
   -t cleaned_steps \
   -t recipes \
@@ -169,8 +193,8 @@ pg_dump -U postgres -d yorijori \
   > db_dumps/cleaned_recipes_only.sql
 
 # 팀원 복원:
-psql -U postgres -d yorijori -f schema.sql
-psql -U postgres -d yorijori < db_dumps/cleaned_recipes_only.sql
+psql -U recipevoice -d recipevoice -f schema.sql
+psql -U recipevoice -d recipevoice < db_dumps/cleaned_recipes_only.sql
 ```
 
 ## 4. 환경 변수 설정
@@ -184,7 +208,7 @@ psql -U postgres -d yorijori < db_dumps/cleaned_recipes_only.sql
 OPENAI_API_KEY=your_openai_api_key_here
 
 # Database
-DATABASE_URL=postgresql://postgres:your_password@localhost:5432/yorijori
+DATABASE_URL=postgresql://recipevoice:recipevoice@localhost:5432/recipevoice
 
 # Server
 PORT=3001
@@ -208,7 +232,7 @@ VITE_WS_URL=ws://localhost:3001
 
 ```bash
 # PostgreSQL 접속
-psql -U postgres -d yorijori
+psql -U recipevoice -d recipevoice
 
 # 테이블 확인
 \dt
@@ -218,13 +242,16 @@ SELECT COUNT(*) FROM recipes;           -- 원본 레시피 (102개 기대)
 SELECT COUNT(*) FROM cleaned_recipes;   -- Planning 완료된 레시피
 SELECT COUNT(*) FROM cleaned_steps;     -- 단계별 스크립트
 
+# raw_data 컬럼 확인
+SELECT recipe_id, title, raw_data IS NOT NULL as has_raw_data FROM recipes LIMIT 5;
+
 # 접속 종료
 \q
 ```
 
 ## 6. Planning 실행 (데이터 복원 안 한 경우)
 
-**주의: 이 과정은 시간이 오래 걸립니다 (102개 레시피 × 30초 = 약 50분)**
+**주의: 이 과정은 시간이 오래 걸립니다 (102개 레시피 × 30초 = 약 50분, gpt-5-nano 사용)**
 
 ```bash
 cd backend
@@ -361,42 +388,101 @@ npm install
 
 ## 10. 데이터베이스 공유 방법 (팀장용)
 
-### 방법 1: 전체 덤프 생성 및 공유
+### 덤프 파일 형식 비교
+
+#### Binary 형식 (.dump)
+- **장점**: 파일 크기 작음 (압축됨, 약 30-50% 작음), 빠른 복원 속도, PostgreSQL 버전 호환성 자동 처리
+- **단점**: 텍스트 에디터로 확인 불가, Git diff 불가능, `pg_restore` 명령어 필요
+- **사용 명령어**: `pg_dump -F c -f filename.dump`
+
+#### SQL 형식 (.sql)
+- **장점**: 텍스트 파일로 확인 가능, Git diff 가능 (변경사항 추적), `psql`로 직접 실행 가능, 수동 편집 가능
+- **단점**: 파일 크기가 큼 (압축 안됨), 복원 속도 느림, PostgreSQL 버전 호환성 주의 필요
+- **사용 명령어**: `pg_dump > filename.sql`
+
+**권장**: Git 공유 목적이라면 SQL 형식 추천 (변경사항 추적 가능)
+
+### 방법 1: 전체 덤프 생성 및 Git 공유 (권장)
+
+#### 옵션 A: pg_dump 사용 (PostgreSQL 클라이언트 도구 필요)
 
 ```bash
-# 1. 덤프 생성 (Planning 결과 포함)
-pg_dump -U postgres -d yorijori -F c -f yorijori_full_$(date +%Y%m%d).dump
+# 1. SQL 형식 덤프 생성 (raw_data + cleaned_recipes 포함)
+pg_dump -U recipevoice -d recipevoice > db_dumps/recipevoice_backup.sql
 
-# 2. 파일 공유 (Google Drive, GitHub Release 등)
-# yorijori_full_20250121.dump
+# 또는 Binary 형식 (파일 크기 작음)
+pg_dump -U recipevoice -d recipevoice -F c -f db_dumps/recipevoice_backup.dump
 
-# 3. 팀원에게 복원 명령 전달
-# pg_restore -U postgres -d yorijori -c yorijori_full_20250121.dump
-```
-
-### 방법 2: Git에 SQL 덤프 포함
-
-```bash
-# .gitignore에서 덤프 파일 제외
-echo "!db_dumps/*.sql" >> .gitignore
-
-# SQL 덤프 생성
-mkdir -p db_dumps
-pg_dump -U postgres -d yorijori --data-only -t cleaned_recipes -t cleaned_steps > db_dumps/cleaned_data.sql
-
-# Git에 커밋
-git add db_dumps/cleaned_data.sql
-git commit -m "Add cleaned recipe database dump"
+# 2. Git에 커밋
+git add db_dumps/recipevoice_backup.*
+git commit -m "Update database dump with latest cleaned recipes"
 git push
 ```
 
-### 방법 3: 클라우드 PostgreSQL 사용 (추천)
+**팀원 복원 방법**:
+```bash
+# SQL 형식
+psql -U recipevoice -d recipevoice < db_dumps/recipevoice_backup.sql
+
+# Binary 형식
+pg_restore -U recipevoice -d recipevoice -c db_dumps/recipevoice_backup.dump
+```
+
+#### 옵션 B: Python 스크립트 사용 (pg_dump 없이도 가능)
+
+PostgreSQL 클라이언트 도구(`pg_dump`, `psql`)가 설치되지 않은 경우 Python 스크립트를 사용할 수 있습니다.
+
+```bash
+# 1. Poetry 환경에서 덤프 생성
+poetry run python backend/scripts/db_dump.py
+
+# 덤프 파일이 db_dumps/ 폴더에 생성됨
+# 예: db_dumps/recipevoice_backup_20250123_143022.sql
+
+# 2. Git에 커밋
+git add db_dumps/recipevoice_backup_*.sql
+git commit -m "Update database dump with latest cleaned recipes"
+git push
+```
+
+**팀원 복원 방법**:
+```bash
+# 방법 1: psql 사용 (PostgreSQL 클라이언트 도구 필요)
+psql -U recipevoice -d recipevoice < db_dumps/recipevoice_backup_*.sql
+
+# 방법 2: Python 스크립트 사용 (psql 없이도 가능)
+# poetry run python backend/scripts/db_restore.py db_dumps/recipevoice_backup_*.sql
+```
+
+> **참고**: 
+> - `pg_dump` 명령어가 없다면 옵션 B를 사용하세요.
+> - Python 스크립트는 Poetry 환경에서 `psycopg`를 통해 데이터베이스에 연결합니다.
+> - 덤프 파일은 SQL 형식으로 생성되며, 주요 테이블(recipes, cleaned_recipes, cleaned_steps)의 데이터를 포함합니다.
+
+### 방법 2: FAISS Index 파일 공유
+
+```bash
+# Index 파일이 이미 구축되어 있다면 Git에 포함
+git add rag-server/storage/faiss.index
+git add rag-server/storage/metadata.json
+git commit -m "Update FAISS index"
+git push
+```
+
+**팀원 사용 방법**:
+```bash
+# Git pull 후 바로 사용 가능
+git pull origin main
+# rag-server/storage/faiss.index 파일이 자동으로 다운로드됨
+```
+
+### 방법 3: 클라우드 PostgreSQL 사용 (선택사항)
 
 **Supabase, Railway, Render 등 무료 PostgreSQL 호스팅**
 
 ```env
 # 모든 팀원이 같은 DB 사용
-DATABASE_URL=postgresql://user:password@db.example.com:5432/yorijori
+DATABASE_URL=postgresql://user:password@db.example.com:5432/recipevoice
 ```
 
 장점:

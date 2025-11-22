@@ -96,13 +96,12 @@ export class PlanningService {
       const userPrompt = this.createPlanningPrompt(recipe);
 
       const response = await this.openai.chat.completions.create({
-        model: 'gpt-4o-mini',
+        model: 'gpt-5-nano',
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user', content: userPrompt }
         ],
-        temperature: 0.5,
-        max_tokens: 4096,
+        max_completion_tokens: 4096,
         response_format: { type: 'json_object' }
       });
 

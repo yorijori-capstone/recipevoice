@@ -78,7 +78,7 @@ export function DashboardV3() {
 
     try {
       const response = await fetch(
-        `${API_BASE_URL}/api/recipes/search/cleaned?q=${encodeURIComponent(searchQuery.trim())}`
+        `${API_BASE_URL}/api/recipes/search/rag?q=${encodeURIComponent(searchQuery.trim())}&top_k=10`
       );
       const data = await response.json();
 

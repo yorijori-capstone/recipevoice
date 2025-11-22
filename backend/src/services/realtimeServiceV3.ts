@@ -100,11 +100,36 @@ export class RealtimeServiceV3 extends EventEmitter {
 
   /**
    * Generate system prompt from cleaned recipe data
+   * 🆕 Uses full planning_result with complete recipe context
    */
   private generateSystemPrompt(session: CookingSession): string {
-    const currentStep = session.plannedSteps[session.currentStepIndex];
+    // 🆕 Get full planning_result for complete context
+    const planningResult = session.planning_result;
+    
+    if (!planningResult) {
+      console.warn('[RealtimeServiceV3] No planning_result in session, using fallback');
+      // Fallback to basic info if planning_result is missing
+      return this.generateFallbackPrompt(session);
+    }
 
-    // 🆕 Timer info with real-time state from frontend
+    // Extract full recipe information
+    const meta = planningResult.meta || {};
+    const ingredients = planningResult.ingredients || { main: [], sub: [] };
+    const tools = planningResult.tools || [];
+    const process = planningResult.process || session.process || [];
+    
+    // Current step information
+    const currentProcessStep = process[session.currentStepIndex];
+    
+    if (!currentProcessStep) {
+      console.warn(`[RealtimeServiceV3] No process step at index ${session.currentStepIndex}`);
+      return this.generateFallbackPrompt(session);
+    }
+
+    // Timer info with real-time state from frontend
+    const timerSeconds = currentProcessStep.timer_seconds;
+    const timerRequired = timerSeconds !== null && timerSeconds > 0;
+    
     let timerInfo: string;
     if (this.timerState) {
       if (this.timerState.isCompleted) {
@@ -112,39 +137,88 @@ export class RealtimeServiceV3 extends EventEmitter {
       } else if (this.timerState.isRunning) {
         timerInfo = `⏱️ TIMER RUNNING: ${this.timerState.remainingTime}초 남음 (총 ${this.timerState.totalTime}초)`;
       } else {
-        timerInfo = currentStep?.timer_required
-          ? `⏱️ TIMER REQUIRED: ${currentStep.estimated_time_sec}초 (아직 시작 안 함)`
+        timerInfo = timerRequired
+          ? `⏱️ TIMER REQUIRED: ${timerSeconds}초 (아직 시작 안 함)`
           : '타이머 불필요';
       }
     } else {
-      timerInfo = currentStep?.timer_required
-        ? `⏱️ TIMER REQUIRED: ${currentStep.estimated_time_sec}초 (${Math.floor(currentStep.estimated_time_sec / 60)}분 ${currentStep.estimated_time_sec % 60}초)`
+      timerInfo = timerRequired
+        ? `⏱️ TIMER REQUIRED: ${timerSeconds}초 (${Math.floor(timerSeconds / 60)}분 ${timerSeconds % 60}초)`
         : '타이머 불필요';
     }
 
-    // 🆕 재료 목록 생성
-    const ingredientsList = session.ingredients && session.ingredients.length > 0
-      ? session.ingredients.map(ing => `${ing.name} ${ing.quantity}`).join(', ')
-      : '재료 정보 없음';
+    // 🆕 재료 목록 생성 (main/sub 구분)
+    const mainIngredients = ingredients.main?.map(ing => 
+      `${ing.name} ${ing.amount}${ing.unit}${ing.notes ? ` (${ing.notes})` : ''}`
+    ).join(', ') || '없음';
+    
+    const subIngredients = ingredients.sub?.map(ing => 
+      `${ing.name} ${ing.amount}${ing.unit}${ing.usage ? ` (${ing.usage})` : ''}`
+    ).join(', ') || '없음';
 
-    // 🆕 첫 대화 여부 판단 (1단계 시작 시)
+    // 🆕 전체 process 배열을 구조화된 형식으로 생성
+    const allStepsText = process.map((step, idx) => {
+      const isCurrent = idx === session.currentStepIndex;
+      const marker = isCurrent ? '👉' : '  ';
+      return `${marker} Step ${step.step_index}: [${step.phase}] ${step.action_type}
+     ${step.description}
+     ${step.ingredients_needed?.length > 0 ? `재료: ${step.ingredients_needed.join(', ')}` : ''}
+     ${step.tools_needed?.length > 0 ? `도구: ${step.tools_needed.join(', ')}` : ''}
+     ${step.heat_level ? `불 조절: ${step.heat_level}` : ''}
+     ${step.timer_seconds ? `시간: ${step.timer_seconds}초` : ''}
+     ${step.tip ? `팁: ${step.tip}` : ''}`;
+    }).join('\n\n');
+
+    // 🆕 첫 대화 여부 판단
     const isFirstStep = session.currentStepIndex === 0;
 
-    return `You are a friendly Korean cooking assistant helping users cook "${session.title}".
+    return `You are a friendly Korean cooking assistant helping users cook "${meta.title || session.title}".
 
-RECIPE INFO:
-- 요리명: ${session.title}
-- 재료: ${ingredientsList}
-- 총 단계: ${session.totalSteps}단계
+═══════════════════════════════════════════════════════════════
+📋 COMPLETE RECIPE INFORMATION (전체 레시피 정보)
+═══════════════════════════════════════════════════════════════
 
-CURRENT STATE:
-- Step ${session.currentStepIndex + 1} of ${session.totalSteps}
-- Current instruction: ${currentStep?.script || 'Getting started'}
-- Timer: ${timerInfo}
+요리명: ${meta.title || session.title}
+설명: ${meta.description || '맛있는 요리입니다'}
+인분: ${meta.servings || 'N/A'}인분
+조리 시간: ${meta.time_estimate || 'N/A'}분
+난이도: ${meta.difficulty || 'Medium'}
 
-YOUR ROLE:
-1. Guide users through cooking steps using the planned scripts
-2. Answer questions about the current step
+주재료:
+${mainIngredients}
+
+양념 및 부재료:
+${subIngredients}
+
+필요한 도구:
+${tools.length > 0 ? tools.join(', ') : '없음'}
+
+═══════════════════════════════════════════════════════════════
+📝 ALL COOKING STEPS (전체 조리 과정)
+═══════════════════════════════════════════════════════════════
+
+${allStepsText}
+
+═══════════════════════════════════════════════════════════════
+📍 CURRENT STEP (현재 단계)
+═══════════════════════════════════════════════════════════════
+
+Step ${session.currentStepIndex + 1} of ${session.totalSteps}
+Phase: ${currentProcessStep.phase}
+Action Type: ${currentProcessStep.action_type}
+Description: ${currentProcessStep.description}
+Heat Level: ${currentProcessStep.heat_level || 'N/A'}
+Timer: ${timerInfo}
+Ingredients Needed: ${currentProcessStep.ingredients_needed?.join(', ') || '없음'}
+Tools Needed: ${currentProcessStep.tools_needed?.join(', ') || '없음'}
+${currentProcessStep.tip ? `Tip: ${currentProcessStep.tip}` : ''}
+
+═══════════════════════════════════════════════════════════════
+🎯 YOUR ROLE
+═══════════════════════════════════════════════════════════════
+
+1. Guide users through cooking steps using the step descriptions above
+2. Answer questions about ANY step (current, previous, or next) using the complete recipe information
 3. Execute commands (next, previous, timer, etc.) through function calling
 4. Keep responses concise and natural
 5. **ALWAYS respond in Korean ONLY** - 절대 한국어로만 대답하세요
@@ -159,8 +233,8 @@ ${isFirstStep ? `🎯 FIRST CONVERSATION FLOW (첫 대화 흐름 - 3단계로 �
 
 📌 STEP B - 인사 받음 → 레시피 소개:
 사용자가 "안녕" 하면:
-1. "안녕하세요! 오늘은 ${session.title}을(를) 만들어 볼게요!"
-2. "필요한 재료는 ${ingredientsList} 입니다."
+1. "안녕하세요! 오늘은 ${meta.title || session.title}을(를) 만들어 볼게요!"
+2. "필요한 재료는 주재료: ${mainIngredients}, 양념 및 부재료: ${subIngredients} 입니다."
 3. "재료가 준비되셨으면 '시작'이라고 말씀해주세요!"
 - ❌ 아직 첫 번째 단계를 설명하지 마세요! "시작"을 기다리세요.
 
@@ -168,23 +242,55 @@ ${isFirstStep ? `🎯 FIRST CONVERSATION FLOW (첫 대화 흐름 - 3단계로 �
 사용자가 "시작", "네", "응", "준비됐어", "좋아" 하면:
 - 드디어 첫 번째 단계를 안내하세요!
 ` : ''}
-IMPORTANT:
-- Use the provided scripts from the recipe plan
-- Do NOT make up cooking instructions
-- For step navigation, use the appropriate functions (navigate_next_step, navigate_previous_step)
+
+IMPORTANT INSTRUCTIONS:
+- Use the step descriptions from the recipe process above
+- Do NOT make up cooking instructions - only use information from the recipe
+- You have access to ALL steps, so you can answer questions like:
+  * "다음 단계는 뭐야?" → Check the next step in the process array
+  * "전체 재료는 뭐야?" → Use the complete ingredients list (main + sub)
+  * "몇 단계 있어?" → Use totalSteps
+  * "X단계는 뭐야?" → Find that step in the process array
+- For step navigation, use the appropriate functions (navigate_next_step, navigate_previous_step, navigate_to_step)
 - **TIMER INSTRUCTIONS**:
-  - If timer_required is true for current step, PROACTIVELY call start_timer when user starts this step
+  - If timer_seconds is set for current step, PROACTIVELY call start_timer when user starts this step
   - When user says "타이머 시작", "타이머 켜줘", etc., call start_timer function
   - When user says "타이머 멈춰", "타이머 정지", etc., call stop_timer function
-- Stay focused on the current cooking step
-- **Only process Korean language inputs** - 한국어 입력만 처리합니다
+- Stay focused on the current cooking step, but use full recipe context for better answers
+- **Only process Korean language inputs** - 한국어 입력만 처리합니다`;
+  }
 
-Current Step Scripts:
-- Main: ${currentStep?.script || 'N/A'}
-- Retry: ${currentStep?.retry_script || 'N/A'}
-- Pause Hint: ${currentStep?.pause_hint || 'N/A'}
-- Timer Required: ${currentStep?.timer_required ? 'YES' : 'NO'}
-- Estimated Time: ${currentStep?.estimated_time_sec || 0}초`;
+  /**
+   * Fallback prompt when planning_result is not available
+   */
+  private generateFallbackPrompt(session: CookingSession): string {
+    const currentProcessStep = session.process[session.currentStepIndex];
+    const ingredientsList = session.ingredients && session.ingredients.length > 0
+      ? session.ingredients.map(ing => `${ing.name} ${ing.quantity}`).join(', ')
+      : '재료 정보 없음';
+
+    return `You are a friendly Korean cooking assistant helping users cook "${session.title}".
+
+RECIPE INFO:
+- 요리명: ${session.title}
+- 재료: ${ingredientsList}
+- 총 단계: ${session.totalSteps}단계
+
+CURRENT STATE:
+- Step ${session.currentStepIndex + 1} of ${session.totalSteps}
+- Current instruction: ${currentProcessStep?.description || 'Getting started'}
+
+YOUR ROLE:
+1. Guide users through cooking steps
+2. Answer questions about the current step
+3. Execute commands through function calling
+4. **ALWAYS respond in Korean ONLY**
+
+IMPORTANT:
+- Use the provided step descriptions
+- Do NOT make up cooking instructions
+- For step navigation, use navigate_next_step, navigate_previous_step functions
+- **Only process Korean language inputs**`;
   }
 
   // ==========================================================================

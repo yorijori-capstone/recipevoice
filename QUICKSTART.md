@@ -9,28 +9,35 @@
 
 ```bash
 # 1) PostgreSQL 데이터베이스 생성
-psql -U postgres -c "DROP DATABASE IF EXISTS \"recipe-db\";"
-psql -U postgres -c "CREATE DATABASE \"recipe-db\";"
+psql -U postgres -c "DROP DATABASE IF EXISTS recipevoice;"
+psql -U postgres -c "CREATE DATABASE recipevoice;"
 
-# 2) dump 파일을 평문 SQL로 변환
-pg_restore -f dump.sql db_dumps/recipe_db_backup.dump
+# 2) 사용자 생성 (없는 경우)
+psql -U postgres -c "CREATE USER recipevoice WITH PASSWORD 'recipevoice';"
+psql -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE recipevoice TO recipevoice;"
 
-# 3) transaction_timeout 라인 제거 (PostgreSQL 버전 호환성)
-sed -i '' '/transaction_timeout/d' dump.sql
-# Linux 사용 시: sed -i '/transaction_timeout/d' dump.sql
+# 3) 마이그레이션 실행
+psql -U recipevoice -d recipevoice -f backend/migrations/001_create_cleaned_recipes.sql
+psql -U recipevoice -d recipevoice -f backend/migrations/002_create_sessions.sql
+psql -U recipevoice -d recipevoice -f backend/migrations/004_add_raw_data_column.sql
+psql -U recipevoice -d recipevoice -f backend/migrations/005_grant_permissions.sql
 
-# 4) SQL 파일을 데이터베이스에 적용
-psql -U postgres -d recipe-db -f dump.sql
+# 4) 덤프 파일 복원 (있는 경우)
+# 방법 A: psql 사용 (PostgreSQL 클라이언트 도구 필요)
+psql -U recipevoice -d recipevoice < db_dumps/recipevoice_backup_*.sql
+
+# 방법 B: Python 스크립트 사용 (pg_dump/psql 없이도 가능)
+# poetry run python backend/scripts/db_restore.py db_dumps/recipevoice_backup_*.sql
 ```
 
 **확인:**
 
 ```bash
-psql -U postgres -d recipe-db -c "\dt"
+psql -U recipevoice -d recipevoice -c "\dt"
 # 7개 테이블 확인: cleaned_recipes, cleaned_steps, cooking_sessions, ingredients, recipes, session_states, steps
 
-psql -U postgres -d recipe-db -c "SELECT COUNT(*) FROM cleaned_recipes;"
-# 결과: 103 (Planning 완료된 레시피)
+psql -U recipevoice -d recipevoice -c "SELECT COUNT(*) FROM cleaned_recipes;"
+# 결과: 클리닝 완료된 레시피 개수 확인
 ```
 
 > **참고**: `transaction_timeout` 은 PostgreSQL 14+ 전용 설정이지만, 클라이언트 버전 차이로 오류가 발생할 수 있습니다. 위 방법은 이를 우회하여 안전하게 복원합니다.
@@ -45,7 +52,7 @@ psql -U postgres -d recipe-db -c "SELECT COUNT(*) FROM cleaned_recipes;"
 
 ```env
 OPENAI_API_KEY=sk-여기에_OpenAI_API_Key_입력
-DATABASE_URL=postgresql://postgres:your_password@localhost:5432/recipe-db
+DATABASE_URL=postgresql://recipevoice:recipevoice@localhost:5432/recipevoice
 PORT=3001
 NODE_ENV=development
 ```
@@ -142,18 +149,23 @@ brew services start postgresql
 sudo systemctl start postgresql
 ```
 
-### "database recipe-db does not exist"
+### "database recipevoice does not exist"
 
 ```bash
-# 데이터베이스 생성 (큰따옴표 필수!)
-psql -U postgres -c "CREATE DATABASE \"recipe-db\";"
+# 데이터베이스 생성
+psql -U postgres -c "CREATE DATABASE recipevoice;"
+psql -U postgres -c "CREATE USER recipevoice WITH PASSWORD 'recipevoice';"
+psql -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE recipevoice TO recipevoice;"
 ```
 
 ### "cleaned_recipes table is empty"
 
 ```bash
-# dump 파일 다시 복원
-pg_restore -U postgres -d "recipe-db" db_dumps/recipe_db_backup.dump
+# 레시피 import 및 클리닝 실행
+cd backend
+npm run import
+# 또는
+npm run clean:all
 ```
 
 ### "OpenAI API Error"
@@ -179,6 +191,27 @@ lsof -ti:3001 | xargs kill -9
 - Backend 콘솔에서 `[RealtimeServiceV3] Loaded 7 MCP tools` 확인
 - 로드 안 됐으면 서버 재시작
 
+### "psql: command not found" 또는 "pg_dump: command not found"
+
+PostgreSQL 클라이언트 도구가 설치되지 않은 경우:
+
+**해결 방법 1: PostgreSQL 클라이언트 도구 설치**
+1. PostgreSQL 설치 프로그램 재실행
+2. "Modify" 선택
+3. "Command Line Tools" 옵션 체크
+4. 설치 완료
+
+**해결 방법 2: Python 스크립트 사용 (권장)**
+```bash
+# 덤프 생성
+poetry run python backend/scripts/db_dump.py
+
+# 덤프 복원 (psql 대신)
+# SQL 파일을 직접 편집하거나, Python 스크립트로 복원 가능
+```
+
+> **참고**: Poetry 환경에서 `psycopg`를 통해 데이터베이스 작업이 가능합니다.
+
 ---
 
 ## 📚 다음 단계
@@ -194,21 +227,47 @@ lsof -ti:3001 | xargs kill -9
 ### Planning 없이 시작했다면?
 
 ```bash
-# 약 50분 소요 (102개 레시피 Planning)
+# 약 50분 소요 (102개 레시피 Planning, gpt-5-nano 사용)
 cd backend
-npm run clean:all
+npm run import  # raw data import
+npm run clean:all  # 클리닝 및 planning
 ```
 
-### DB 덤프 파일이 없다면?
+### 데이터베이스 덤프 생성 (팀 공유용)
 
-1. 팀장에게 `db_dumps/recipe_db_backup.dump` 파일 요청
-2. 또는 직접 Planning 실행 (`npm run clean:all`)
+**PostgreSQL 클라이언트 도구가 있는 경우:**
+```bash
+# pg_dump 사용
+pg_dump -U recipevoice -d recipevoice > db_dumps/recipevoice_backup.sql
+```
 
-### Git에서 DB 덤프 받기:
+**PostgreSQL 클라이언트 도구가 없는 경우 (Python 스크립트 사용):**
+```bash
+# Poetry 환경에서 실행
+poetry run python backend/scripts/db_dump.py
+
+# 덤프 파일이 db_dumps/ 폴더에 생성됨
+# 예: db_dumps/recipevoice_backup_20250123_143022.sql
+```
+
+> **참고**: `pg_dump` 명령어가 없다면 Python 스크립트를 사용하세요. Poetry 환경에서 `psycopg`를 통해 덤프를 생성합니다.
+
+### FAISS 인덱스 구축 (RAG 검색 사용 시)
+
+**방법 1: Git에서 받기 (추천)**
 
 ```bash
+# Git pull 후 Index 파일 자동 다운로드
 git pull origin main
-# db_dumps/recipe_db_backup.dump 파일 자동 다운로드
+# rag-server/storage/faiss.index 파일이 자동으로 다운로드됨
+```
+
+**방법 2: 직접 구축 (Index 파일이 없을 때만)**
+
+```bash
+cd rag-server
+python build_index.py
+# 임베딩 생성 및 FAISS 인덱스 구축 (약 5-10분 소요)
 ```
 
 ---
@@ -220,5 +279,7 @@ git pull origin main
 | **Native Tool Calling** | LangChain 없이 OpenAI Realtime API 직접 사용 |
 | **MCP Protocol**        | 7개 표준화된 도구 (navigate, timer, get)     |
 | **gpt-realtime**        | 최신 Realtime API 모델                       |
+| **gpt-5-nano**          | 레시피 정제 및 Planning에 사용              |
+| **RAG 검색**            | FAISS 기반 의미 기반 레시피 검색             |
 | **Timer Sync**          | AI가 타이머 상태 실시간 인식                 |
 | **인사 흐름**           | "안녕" → 소개 → "시작" → 요리 시작           |

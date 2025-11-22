@@ -14,6 +14,15 @@ This folder contains database migration scripts for the new architecture.
    - `cooking_sessions` table (cooking progress)
    - `session_states` table (event logging)
 
+3. **004_add_raw_data_column.sql** - Raw Data Storage
+   - `raw_data` JSONB column added to `recipes` table
+   - Stores original raw recipe data for GPT processing
+   - GIN index for efficient JSONB queries
+
+4. **005_grant_permissions.sql** - Database Permissions
+   - Grants necessary permissions to `recipevoice` user
+   - Table and sequence permissions for all relevant tables
+
 ---
 
 ## 🚀 How to Execute Migrations
@@ -22,16 +31,24 @@ This folder contains database migration scripts for the new architecture.
 
 ```bash
 # Navigate to backend folder
-cd c:\Sogang\last_project\backend
+cd backend
 
 # Execute migration 001
-psql -U postgres -d recipe_db -f migrations/001_create_cleaned_recipes.sql
+psql -U recipevoice -d recipevoice -f migrations/001_create_cleaned_recipes.sql
 
 # Execute migration 002
-psql -U postgres -d recipe_db -f migrations/002_create_sessions.sql
+psql -U recipevoice -d recipevoice -f migrations/002_create_sessions.sql
+
+# Execute migration 004
+psql -U recipevoice -d recipevoice -f migrations/004_add_raw_data_column.sql
+
+# Execute migration 005
+psql -U recipevoice -d recipevoice -f migrations/005_grant_permissions.sql
 ```
 
-**Password**: `yorijori`
+**Database**: `recipevoice`  
+**User**: `recipevoice`  
+**Password**: `recipevoice`
 
 ---
 
@@ -39,34 +56,40 @@ psql -U postgres -d recipe_db -f migrations/002_create_sessions.sql
 
 1. Open **pgAdmin**
 2. Connect to PostgreSQL server
-3. Navigate to: **Servers** → **PostgreSQL** → **Databases** → **recipe_db**
-4. Right-click on **recipe_db** → **Query Tool**
+3. Navigate to: **Servers** → **PostgreSQL** → **Databases** → **recipevoice**
+4. Right-click on **recipevoice** → **Query Tool**
 5. Open file: `migrations/001_create_cleaned_recipes.sql`
 6. Click **Execute** (F5)
 7. Repeat for `migrations/002_create_sessions.sql`
+8. Repeat for `migrations/004_add_raw_data_column.sql`
+9. Repeat for `migrations/005_grant_permissions.sql`
 
 ---
 
 ### **Method 3: Using DBeaver (GUI)**
 
 1. Open **DBeaver**
-2. Connect to PostgreSQL `recipe_db`
+2. Connect to PostgreSQL `recipevoice`
 3. Right-click on connection → **SQL Editor** → **Open SQL Script**
 4. Select `migrations/001_create_cleaned_recipes.sql`
 5. Click **Execute SQL Statement** (Ctrl+Enter)
 6. Repeat for `migrations/002_create_sessions.sql`
+7. Repeat for `migrations/004_add_raw_data_column.sql`
+8. Repeat for `migrations/005_grant_permissions.sql`
 
 ---
 
 ### **Method 4: Copy & Paste (Manual)**
 
 1. Open any PostgreSQL client (psql, pgAdmin, DBeaver, etc.)
-2. Connect to `recipe_db` database
+2. Connect to `recipevoice` database
 3. Open `migrations/001_create_cleaned_recipes.sql` in a text editor
 4. Copy all content
 5. Paste into SQL query window
 6. Execute
 7. Repeat for `migrations/002_create_sessions.sql`
+8. Repeat for `migrations/004_add_raw_data_column.sql`
+9. Repeat for `migrations/005_grant_permissions.sql`
 
 ---
 
@@ -118,6 +141,9 @@ DROP TABLE IF EXISTS cleaned_recipes CASCADE;
 ---
 
 ## 📊 Expected Schema
+
+### **recipes** (updated in 004)
+- `raw_data` (JSONB) - Original raw recipe data for GPT processing
 
 ### **cleaned_recipes**
 - `id` (SERIAL PRIMARY KEY)

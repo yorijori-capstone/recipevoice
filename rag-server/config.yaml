@@ -1,9 +1,9 @@
 database:
   host: localhost
   port: 5432
-  name: recipe_db
-  user: postgres
-  password: yorijori
+  name: recipevoice
+  user: recipevoice 
+  password: recipevoice
 
 paths:
   faiss_index_path: storage/faiss.index

@@ -9,20 +9,20 @@
 ## 🏗️ System Architecture Diagram
 
 ```
-[Raw Recipe DB (102개)]
+[Raw Recipe DB (102개) + raw_data JSONB]
         |
-        | (1회 실행: npm run clean:all)
+        | (1회 실행: npm run import → npm run clean:all)
         v
-[RecipeService + Planning Service (GPT-4o)]
+[CleanedRecipeService + Planning Service (gpt-5-nano)]
         |
-        | Planning 결과 저장
+        | Planning 결과 저장 (planning_result JSONB)
         v
 [Cleaned Recipe DB] ────────────────────────────────┐
         |                                            |
-        | (실시간 검색)                               | (AI 생성)
+        | (RAG/Keyword 검색)                          | (AI 생성)
         v                                            v
-[DashboardV2 UI] ──────> 검색 실패 시 ──────> [NanoService]
-        |                                      (GPT-4o)
+[DashboardV3 UI] ──────> 검색 실패 시 ──────> [NanoService]
+        |                                      (gpt-5-nano)
         |                                            |
         |                                            | 레시피 생성 +
         |                                            | Planning 자동 실행
@@ -73,13 +73,15 @@ ServerV3 ──> 'tool_executed'         ──> Frontend (Tool 실행 결과)
 
 **주요 특징 (V3)**:
 
-- ⚡ **Pre-Planning**: 102개 레시피 사전 처리 (1회만)
+- ⚡ **Pre-Planning**: 102개 레시피 사전 처리 (1회만, gpt-5-nano)
 - 🚀 **즉시 시작**: 0.1초 세션 시작 (50-100배 빠름)
-- 🤖 **AI 생성**: GPT-3.5로 실시간 레시피 생성
+- 🤖 **AI 생성**: gpt-5-nano로 실시간 레시피 생성 및 정제
+- 🔍 **RAG 검색**: FAISS 기반 의미 기반 레시피 검색
 - 🔧 **Native Tool Calling**: LangChain 제거, OpenAI Realtime API 직접 통합
 - 💾 **세션 복구**: PostgreSQL + localStorage
 - 🔄 **Real-time Sync**: WebSocket V3 이벤트 broadcasting
 - 🎯 **MCP Protocol**: 7개 도구로 요리 흐름 제어
+- 📦 **Raw Data Storage**: 원본 레시피 데이터 JSONB 저장
 
 ---
 
@@ -113,17 +115,23 @@ ServerV3 ──> 'tool_executed'         ──> Frontend (Tool 실행 결과)
 │ Phase 1: Pre-Planning (오프라인, 1회만 실행)                      │
 └─────────────────────────────────────────────────────────────────┘
 
+Import Script: npm run import
+  ↓
+recipes 테이블에 raw_data (JSONB) 저장
+  ↓
 Batch Script: npm run clean:all
   ↓
 CleanedRecipeService.cleanAllRecipes()
   ↓
 For each raw recipe:
   ↓
-  Planning Service (GPT-4o)
+  Planning Service (gpt-5-nano)
+    - raw_data JSONB 파싱
     - RecipeInput → PlanningOutput 변환
+    - meta, ingredients, tools, process 생성
     - 각 단계별 script, retry_script, timer 정보 생성
   ↓
-  cleaned_recipes 테이블 저장
+  cleaned_recipes 테이블 저장 (planning_result JSONB)
   cleaned_steps 테이블 저장
   ↓
 102개 레시피 사전 처리 완료
@@ -132,7 +140,7 @@ For each raw recipe:
 │ Phase 2: Session Start (실시간, 0.1초)                           │
 └─────────────────────────────────────────────────────────────────┘
 
-DashboardV2: 레시피 검색 or AI 생성
+DashboardV3: 레시피 검색 (RAG/Keyword) or AI 생성
   ↓
 RecipeDetail 페이지: "요리 시작" 버튼 클릭
   ↓

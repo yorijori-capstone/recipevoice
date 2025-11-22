@@ -6,6 +6,12 @@ from pathlib import Path
 from typing import List, Dict, Any
 import json
 import sys
+import io
+
+# Windows 인코딩 문제 해결
+if sys.platform == 'win32':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
@@ -21,7 +27,7 @@ MODEL_NAME = CFG["embedding"]["model"]
 TOP_K = CFG["faiss"]["top_k"]
 
 # Load resources
-print("📥 [RAG] Loading FAISS index and model...")
+print("[RAG] Loading FAISS index and model...")
 INDEX = faiss.read_index(str(INDEX_PATH))
 EMBEDDER = LocalEmbedder(MODEL_NAME)
 print(f"✅ [RAG] Loaded successfully (index size: {INDEX.ntotal})")
@@ -46,7 +52,7 @@ def search_recipes(query: str, top_k: int = None) -> List[str]:
     if top_k is None:
         top_k = TOP_K
     
-    print(f"🔍 [RAG] Searching for: '{query}' (top_k={top_k})")
+    print(f"[RAG] Searching for: '{query}' (top_k={top_k})")
     
     # 1. Encode query
     query_vector = EMBEDDER.encode([query])
@@ -63,20 +69,20 @@ def search_recipes(query: str, top_k: int = None) -> List[str]:
             recipe_ids.append(recipe_id)
             print(f"   - {METADATA[idx]['title']} (score: {distance:.3f})")
     
-    print(f"✅ [RAG] Found {len(recipe_ids)} recipes")
+    print(f"[RAG] Found {len(recipe_ids)} recipes")
     return recipe_ids
 
 
 def search_with_details(query: str, top_k: int = None) -> List[Dict[str, Any]]:
     """
-    Search recipes and return with metadata.
+    Search recipes and return with metadata (Phase 3: Enhanced with chunk type).
     
     Args:
         query: Search query
         top_k: Number of results
         
     Returns:
-        List of dicts with recipe_id, title, score
+        List of dicts with recipe_id, title, score, chunk_type, metadata
     """
     if top_k is None:
         top_k = TOP_K
@@ -87,13 +93,22 @@ def search_with_details(query: str, top_k: int = None) -> List[Dict[str, Any]]:
     distances, indices = INDEX.search(query_vector, top_k)
     
     results = []
+    seen_recipe_ids = set()  # Deduplicate by recipe_id
+    
     for idx, distance in zip(indices[0], distances[0]):
         if idx < len(METADATA):
             meta = METADATA[idx]
-            results.append({
-                'recipe_id': meta['recipe_id'],
-                'title': meta['title'],
-                'score': float(distance)
-            })
+            recipe_id = meta['recipe_id']
+            
+            # Deduplicate: only add first occurrence of each recipe_id
+            if recipe_id not in seen_recipe_ids:
+                seen_recipe_ids.add(recipe_id)
+                results.append({
+                    'recipe_id': recipe_id,
+                    'title': meta.get('title', ''),
+                    'score': float(distance),
+                    'chunk_type': meta.get('type', 'unknown'),
+                    'metadata': meta.get('metadata', {})
+                })
     
     return results
