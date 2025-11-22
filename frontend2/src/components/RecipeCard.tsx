@@ -47,185 +47,180 @@ export function RecipeCard({ recipe_id, title, cookTime, difficulty, servings, o
   };
 
   return (
-    <div
-      className="card position-relative"
-      style={{
-        borderRadius: 'var(--radius-md)',
-        border: '1px solid var(--color-border-light)',
-        boxShadow: isHovered ? 'var(--shadow-card-hover)' : 'var(--shadow-card)',
-        transform: isHovered ? 'translateY(-4px)' : 'translateY(0)',
-        transition: 'all var(--transition-base)',
-        overflow: 'hidden',
-      }}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-    >
-      <div className="card-body" style={{ padding: 'var(--spacing-4)' }}>
-        {/* AI Generated Badge */}
-        {isAIGenerated && (
-          <div className="mb-2">
-            <span
-              className="badge"
-              style={{
-                background: 'linear-gradient(135deg, var(--color-secondary), var(--color-secondary-dark))',
-                color: 'white',
-                padding: 'var(--spacing-1) var(--spacing-3)',
-                borderRadius: 'var(--radius-sm)',
-                fontWeight: 'var(--font-weight-medium)',
-                fontSize: 'var(--font-size-xs)',
-              }}
-            >
-              ✨ AI 생성
-            </span>
-          </div>
-        )}
-
-        <h5
-          className="card-title mb-3"
+    <>
+      <Link
+        to={`/recipe/${recipe_id}`}
+        className="text-decoration-none"
+        style={{ color: 'inherit' }}
+      >
+        <div
+          className="card position-relative h-100"
           style={{
-            fontSize: 'var(--font-size-lg)',
-            fontWeight: 'var(--font-weight-bold)',
-            color: 'var(--color-text-primary)',
-            lineHeight: 'var(--line-height-tight)',
+            borderRadius: 'var(--radius-lg)',
+            border: 'none',
+            boxShadow: isHovered ? 'var(--shadow-card-hover)' : 'var(--shadow-sm)',
+            transform: isHovered ? 'translateY(-2px)' : 'translateY(0)',
+            transition: 'all var(--transition-base)',
+            overflow: 'hidden',
+            background: 'white',
           }}
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
         >
-          {title}
-        </h5>
-
-        <div className="d-flex flex-wrap gap-2 mb-3">
-          <span
-            className="badge"
-            style={{
-              background: 'rgba(255, 107, 53, 0.1)',
-              color: 'var(--color-primary)',
-              border: '1px solid var(--color-primary)',
-              fontWeight: 'var(--font-weight-medium)',
-              fontSize: 'var(--font-size-xs)',
-              padding: 'var(--spacing-1) var(--spacing-3)',
-            }}
-          >
-            👥 {servings}
-          </span>
-          <span
-            className="badge"
-            style={{
-              background: 'rgba(255, 107, 53, 0.1)',
-              color: 'var(--color-primary)',
-              border: '1px solid var(--color-primary)',
-              fontWeight: 'var(--font-weight-medium)',
-              fontSize: 'var(--font-size-xs)',
-              padding: 'var(--spacing-1) var(--spacing-3)',
-            }}
-          >
-            ⏱️ {cookTime}
-          </span>
-          <span
-            className="badge"
-            style={{
-              background: 'rgba(255, 107, 53, 0.1)',
-              color: 'var(--color-primary)',
-              border: '1px solid var(--color-primary)',
-              fontWeight: 'var(--font-weight-medium)',
-              fontSize: 'var(--font-size-xs)',
-              padding: 'var(--spacing-1) var(--spacing-3)',
-            }}
-          >
-            📊 {difficulty}
-          </span>
-        </div>
-
-        <div className="d-flex gap-2">
-          <Link
-            to={`/recipe/${recipe_id}`}
-            className="btn btn-primary flex-grow-1"
-            style={{
-              borderRadius: 'var(--radius-md)',
-              fontWeight: 'var(--font-weight-medium)',
-              padding: 'var(--spacing-2) var(--spacing-4)',
-              fontSize: 'var(--font-size-sm)',
-            }}
-          >
-            레시피 보기
-          </Link>
-          {isAIGenerated && (
-            <button
-              className="btn btn-outline-danger"
-              onClick={() => setShowDeleteConfirm(true)}
-              title="삭제"
+          <div className="d-flex align-items-center p-3">
+            {/* Left: Image Placeholder */}
+            <div
+              className="flex-shrink-0 d-flex align-items-center justify-content-center rounded-3 me-3"
               style={{
-                borderRadius: 'var(--radius-md)',
-                padding: 'var(--spacing-2) var(--spacing-3)',
-                borderColor: 'var(--color-primary)',
-                color: 'var(--color-primary)',
+                width: '80px',
+                height: '80px',
+                background: 'linear-gradient(135deg, #FFE5D9 0%, #FFF0E6 100%)',
+                fontSize: '2rem',
               }}
             >
-              🗑️
-            </button>
-          )}
+              🍳
+            </div>
+
+            {/* Right: Content */}
+            <div className="flex-grow-1 min-width-0">
+              <div className="d-flex justify-content-between align-items-start mb-1">
+                <h5
+                  className="card-title mb-0"
+                  style={{
+                    fontSize: 'var(--font-size-md)',
+                    fontWeight: 'var(--font-weight-bold)',
+                    color: 'var(--color-text-primary)',
+                    display: '-webkit-box',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    lineHeight: '1.3',
+                  }}
+                >
+                  {title}
+                </h5>
+
+                {/* AI Badge or Delete Button */}
+                {isAIGenerated && (
+                  <div className="d-flex align-items-center gap-2">
+                    <span
+                      className="badge rounded-pill"
+                      style={{
+                        background: 'var(--color-secondary)',
+                        fontSize: '0.65rem',
+                        fontWeight: 'var(--font-weight-bold)',
+                      }}
+                    >
+                      AI
+                    </span>
+                    <button
+                      className="btn btn-link p-0 text-muted"
+                      onClick={(e) => {
+                        e.preventDefault(); // Prevent navigation
+                        e.stopPropagation();
+                        setShowDeleteConfirm(true);
+                      }}
+                      style={{ fontSize: '1rem', lineHeight: 1 }}
+                    >
+                      &times;
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="d-flex flex-wrap gap-2">
+                <span
+                  style={{
+                    fontSize: '0.75rem',
+                    color: 'var(--color-text-secondary)',
+                    background: 'var(--color-background)',
+                    padding: '2px 8px',
+                    borderRadius: '4px',
+                    fontWeight: '500',
+                  }}
+                >
+                  👥 {servings}
+                </span>
+                <span
+                  style={{
+                    fontSize: '0.75rem',
+                    color: 'var(--color-text-secondary)',
+                    background: 'var(--color-background)',
+                    padding: '2px 8px',
+                    borderRadius: '4px',
+                    fontWeight: '500',
+                  }}
+                >
+                  ⏱️ {cookTime}
+                </span>
+                <span
+                  style={{
+                    fontSize: '0.75rem',
+                    color: 'var(--color-text-secondary)',
+                    background: 'var(--color-background)',
+                    padding: '2px 8px',
+                    borderRadius: '4px',
+                    fontWeight: '500',
+                  }}
+                >
+                  📊 {difficulty}
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
+      </Link>
 
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
         <div
-          className="modal d-block"
-          style={{
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            backdropFilter: 'blur(4px)',
+          className="modal show d-block"
+          tabIndex={-1}
+          style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1050 }}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
           }}
-          onClick={() => setShowDeleteConfirm(false)}
         >
-          <div className="modal-dialog modal-dialog-centered" onClick={(e) => e.stopPropagation()}>
-            <div
-              className="modal-content"
-              style={{
-                borderRadius: 'var(--radius-lg)',
-                border: 'none',
-                boxShadow: 'var(--shadow-2xl)',
-              }}
-            >
-              <div
-                className="modal-header"
-                style={{
-                  borderBottom: '1px solid var(--color-border-light)',
-                  padding: 'var(--spacing-5)',
-                }}
-              >
-                <h5 className="modal-title" style={{ fontWeight: 'var(--font-weight-bold)' }}>
-                  레시피 삭제
-                </h5>
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content" style={{ borderRadius: 'var(--radius-lg)', border: 'none' }}>
+              <div className="modal-header border-0 pb-0">
+                <h5 className="modal-title fw-bold">레시피 삭제</h5>
                 <button
                   type="button"
                   className="btn-close"
-                  onClick={() => setShowDeleteConfirm(false)}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setShowDeleteConfirm(false);
+                  }}
                 ></button>
               </div>
-              <div className="modal-body" style={{ padding: 'var(--spacing-5)' }}>
-                <p><strong>{title}</strong> 레시피를 삭제하시겠습니까?</p>
-                <p className="text-muted small mb-0">이 작업은 되돌릴 수 없습니다.</p>
+              <div className="modal-body text-center py-4">
+                <p className="mb-0 text-muted">정말로 이 레시피를 삭제하시겠습니까?</p>
               </div>
-              <div
-                className="modal-footer"
-                style={{
-                  borderTop: '1px solid var(--color-border-light)',
-                  padding: 'var(--spacing-5)',
-                }}
-              >
+              <div className="modal-footer border-0 pt-0 justify-content-center gap-2 pb-4">
                 <button
                   type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setShowDeleteConfirm(false)}
-                  disabled={isDeleting}
-                  style={{ borderRadius: 'var(--radius-md)' }}
+                  className="btn btn-light px-4 rounded-pill"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setShowDeleteConfirm(false);
+                  }}
                 >
                   취소
                 </button>
                 <button
                   type="button"
-                  className="btn btn-danger"
-                  onClick={handleDelete}
+                  className="btn btn-danger px-4 rounded-pill"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleDelete();
+                  }}
                   disabled={isDeleting}
-                  style={{ borderRadius: 'var(--radius-md)' }}
                 >
                   {isDeleting ? '삭제 중...' : '삭제'}
                 </button>
@@ -234,6 +229,6 @@ export function RecipeCard({ recipe_id, title, cookTime, difficulty, servings, o
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }

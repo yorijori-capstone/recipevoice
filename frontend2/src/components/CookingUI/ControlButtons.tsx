@@ -29,24 +29,24 @@ export function ControlButtons({
         <h5 className="mb-0">📖 단계 이동</h5>
       </div>
       <div className="card-body">
-        <div className="d-grid gap-2">
+        <div className="d-flex gap-2">
           {/* Previous Step */}
           <button
-            className="btn btn-outline-primary btn-lg"
+            className="btn btn-outline-primary btn-lg flex-grow-1"
             onClick={onPrevious}
             disabled={loading || isFirstStep || status === 'completed'}
           >
             <i className="bi bi-chevron-left me-2"></i>
-            이전 단계
+            이전
           </button>
 
           {/* Next Step */}
           <button
-            className="btn btn-primary btn-lg"
+            className="btn btn-primary btn-lg flex-grow-1"
             onClick={onNext}
             disabled={loading || isLastStep || status === 'completed'}
           >
-            다음 단계
+            다음
             <i className="bi bi-chevron-right ms-2"></i>
           </button>
         </div>

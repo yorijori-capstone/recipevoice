@@ -137,23 +137,6 @@ export function DashboardV3() {
 
   const totalPages = isSearching ? 1 : Math.ceil(total / limit);
 
-  const getPageNumbers = () => {
-    const pages = [];
-    const maxVisible = 5;
-
-    let startPage = Math.max(1, page - Math.floor(maxVisible / 2));
-    let endPage = Math.min(totalPages, startPage + maxVisible - 1);
-
-    if (endPage - startPage < maxVisible - 1) {
-      startPage = Math.max(1, endPage - maxVisible + 1);
-    }
-
-    for (let i = startPage; i <= endPage; i++) {
-      pages.push(i);
-    }
-
-    return pages;
-  };
 
   return (
     <div className="container" style={{ padding: 'var(--spacing-4)' }}>
@@ -212,6 +195,8 @@ export function DashboardV3() {
                 fontWeight: 'var(--font-weight-medium)',
                 fontSize: 'var(--font-size-base)',
                 border: 'none',
+                backgroundColor: 'var(--color-primary)',
+                color: 'white',
               }}
             >
               {loading ? (
@@ -351,100 +336,124 @@ export function DashboardV3() {
               </div>
             )}
 
-            {/* Recipe grid with stagger animation */}
-            <div className="row stagger-animation">
-              {displayRecipes.map((recipe) => (
-                <div className="col-12 mb-4" key={recipe.recipeId}>
-                  <RecipeCard
-                    id={recipe.id}
-                    recipe_id={recipe.recipeId}
-                    title={recipe.title}
-                    cookTime={recipe.cookTime || ''}
-                    difficulty={recipe.difficulty || ''}
-                    servings={recipe.servings || ''}
-                    onDelete={() => {
-                      // Refresh the list after deletion
-                      if (isSearching) {
-                        handleSearch();
-                      } else {
-                        fetchAllRecipes();
-                      }
-                    }}
-                  />
-                </div>
-              ))}
-            </div>
+            {/* Recipe List Section with Gray Background */}
+            <div
+              style={{
+                backgroundColor: '#f8f9fa',
+                padding: '1.5rem',
+                minHeight: '60vh',
+                boxShadow: '0 -4px 20px rgba(0,0,0,0.02)'
+              }}
+            >
+              {/* Recipe grid with stagger animation */}
+              <div className="row stagger-animation">
+                {displayRecipes.map((recipe) => (
+                  <div className="col-12 mb-3" key={recipe.recipeId}>
+                    <RecipeCard
+                      id={recipe.id}
+                      recipe_id={recipe.recipeId}
+                      title={recipe.title}
+                      cookTime={recipe.cookTime || ''}
+                      difficulty={recipe.difficulty || ''}
+                      servings={recipe.servings || ''}
+                      onDelete={() => {
+                        // Refresh the list after deletion
+                        if (isSearching) {
+                          handleSearch();
+                        } else {
+                          fetchAllRecipes();
+                        }
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
 
-            {/* Pagination - only show when not searching */}
-            {!isSearching && totalPages > 1 && (
-              <nav aria-label="레시피 페이지네이션" className="mt-5">
-                <ul className="pagination justify-content-center">
-                  <li className={`page-item ${page === 1 ? 'disabled' : ''}`}>
-                    <button
-                      className="page-link"
-                      onClick={() => setPage(1)}
-                      disabled={page === 1}
-                      aria-label="처음"
-                    >
-                      <span aria-hidden="true">&laquo;</span>
-                    </button>
-                  </li>
-
-                  <li className={`page-item ${page === 1 ? 'disabled' : ''}`}>
-                    <button
-                      className="page-link"
-                      onClick={() => setPage(page - 1)}
-                      disabled={page === 1}
-                      aria-label="이전"
-                    >
-                      <span aria-hidden="true">&lsaquo;</span>
-                    </button>
-                  </li>
-
-                  {page > 3 && (
-                    <li className="page-item disabled">
-                      <span className="page-link">...</span>
-                    </li>
-                  )}
-
-                  {getPageNumbers().map((pageNum) => (
-                    <li key={pageNum} className={`page-item ${page === pageNum ? 'active' : ''}`}>
-                      <button className="page-link" onClick={() => setPage(pageNum)}>
-                        {pageNum}
+              {/* Pagination - only show when not searching */}
+              {!isSearching && totalPages > 1 && (
+                <nav aria-label="레시피 페이지네이션" className="mt-4">
+                  <ul className="pagination justify-content-center">
+                    <li className={`page-item ${page === 1 ? 'disabled' : ''}`}>
+                      <button
+                        className="page-link"
+                        onClick={() => setPage(1)}
+                        disabled={page === 1}
+                        aria-label="처음"
+                        style={{ borderRadius: '50%', width: '36px', height: '36px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 4px' }}
+                      >
+                        <span aria-hidden="true">&laquo;</span>
                       </button>
                     </li>
-                  ))}
 
-                  {page < totalPages - 2 && (
-                    <li className="page-item disabled">
-                      <span className="page-link">...</span>
+                    <li className={`page-item ${page === 1 ? 'disabled' : ''}`}>
+                      <button
+                        className="page-link"
+                        onClick={() => setPage(page - 1)}
+                        disabled={page === 1}
+                        aria-label="이전"
+                        style={{ borderRadius: '50%', width: '36px', height: '36px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 4px' }}
+                      >
+                        <span aria-hidden="true">&lsaquo;</span>
+                      </button>
                     </li>
-                  )}
 
-                  <li className={`page-item ${page === totalPages ? 'disabled' : ''}`}>
-                    <button
-                      className="page-link"
-                      onClick={() => setPage(page + 1)}
-                      disabled={page === totalPages}
-                      aria-label="다음"
-                    >
-                      <span aria-hidden="true">&rsaquo;</span>
-                    </button>
-                  </li>
+                    {[...Array(5)].map((_, i) => {
+                      const pageNum = page - 2 + i;
+                      if (pageNum > 0 && pageNum <= totalPages) {
+                        return (
+                          <li key={pageNum} className={`page-item ${page === pageNum ? 'active' : ''}`}>
+                            <button
+                              className="page-link"
+                              onClick={() => setPage(pageNum)}
+                              style={{
+                                borderRadius: '50%',
+                                width: '36px',
+                                height: '36px',
+                                padding: 0,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                margin: '0 4px',
+                                backgroundColor: page === pageNum ? 'var(--color-primary)' : 'white',
+                                borderColor: page === pageNum ? 'var(--color-primary)' : '#dee2e6',
+                                color: page === pageNum ? 'white' : 'var(--color-primary)'
+                              }}
+                            >
+                              {pageNum}
+                            </button>
+                          </li>
+                        );
+                      }
+                      return null;
+                    })}
 
-                  <li className={`page-item ${page === totalPages ? 'disabled' : ''}`}>
-                    <button
-                      className="page-link"
-                      onClick={() => setPage(totalPages)}
-                      disabled={page === totalPages}
-                      aria-label="마지막"
-                    >
-                      <span aria-hidden="true">&raquo;</span>
-                    </button>
-                  </li>
-                </ul>
-              </nav>
-            )}
+                    <li className={`page-item ${page === totalPages ? 'disabled' : ''}`}>
+                      <button
+                        className="page-link"
+                        onClick={() => setPage(page + 1)}
+                        disabled={page === totalPages}
+                        aria-label="다음"
+                        style={{ borderRadius: '50%', width: '36px', height: '36px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 4px' }}
+                      >
+                        <span aria-hidden="true">&rsaquo;</span>
+                      </button>
+                    </li>
+
+                    <li className={`page-item ${page === totalPages ? 'disabled' : ''}`}>
+                      <button
+                        className="page-link"
+                        onClick={() => setPage(totalPages)}
+                        disabled={page === totalPages}
+                        aria-label="마지막"
+                        style={{ borderRadius: '50%', width: '36px', height: '36px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 4px' }}
+                      >
+                        <span aria-hidden="true">&raquo;</span>
+                      </button>
+                    </li>
+                  </ul>
+                </nav>
+              )}
+            </div>
           </>
         )}
         {/* Recipe Generate Modal */}

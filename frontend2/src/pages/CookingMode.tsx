@@ -229,9 +229,28 @@ export function CookingMode() {
     );
   }
 
+  console.log('[CookingMode] Render State:', {
+    loading,
+    error,
+    hasSession: !!session,
+    plannedSteps: session?.plannedSteps?.length,
+    viewingStepIndex: session?.viewingStepIndex
+  });
+
   // No session or session not fully loaded
   if (!session || !session.plannedSteps || session.plannedSteps.length === 0) {
-    return null;
+    console.log('[CookingMode] Session data missing, showing fallback UI');
+    return (
+      <div className="container mt-5 text-center">
+        <div className="spinner-border text-secondary" role="status">
+          <span className="visually-hidden">Loading...</span>
+        </div>
+        <p className="mt-3 text-muted">세션 정보를 불러오는 중입니다...</p>
+        <button className="btn btn-outline-primary mt-3" onClick={() => window.location.reload()}>
+          새로고침
+        </button>
+      </div>
+    );
   }
 
   // UI 확인용 단계
@@ -359,98 +378,102 @@ export function CookingMode() {
           </div>
 
           {/* Controls - Full Width for Mobile */}
-          <div>
-            <div>
-              <ControlButtons
-                status={session.status}
-                currentStepIndex={session.viewingStepIndex}
-                totalSteps={session.totalSteps}
-                onPrevious={handlePrevious}
-                onNext={handleNext}
-                loading={loading}
-              />
-
-              {/* Quick Actions */}
-              <div className="card shadow mt-3">
-                <div className="card-header bg-secondary text-white">
-                  <h6 className="mb-0">빠른 실행</h6>
-                </div>
-                <div className="card-body">
-                  <div className="d-grid gap-2">
-                    <button
-                      className="btn btn-outline-primary btn-sm"
-                      onClick={() => setShowPlanModal(true)}
-                    >
-                      📋 Planning 결과 보기
-                    </button>
-                    <button
-                      className="btn btn-outline-secondary btn-sm"
-                      onClick={handleEndSession}
-                    >
-                      🏠 요리 종료
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          <ControlButtons
+            status={session.status}
+            currentStepIndex={session.viewingStepIndex}
+            totalSteps={session.totalSteps}
+            onPrevious={handlePrevious}
+            onNext={handleNext}
+            loading={loading}
+          />
         </div>
       )}
 
       {/* Voice Interaction Section */}
-      {session.status !== 'completed' && session.sessionId && (
-        <div className="row mt-4">
-          <div className="col-12">
-            <VoiceInteraction
-              ref={voiceRef}
-              key={session.sessionId}
-              sessionId={session.sessionId}
-              currentStepIndex={session.currentStepIndex}
-              plannedSteps={session.plannedSteps}
-              onCommandDetected={handleVoiceCommand}
-              onStepAutoChanged={handleStepAutoChanged}
-              onSessionStateUpdated={handleSessionStateUpdated}
-            />
+      {
+        session.status !== 'completed' && session.sessionId && (
+          <div className="row mt-4">
+            <div className="col-12">
+              <VoiceInteraction
+                ref={voiceRef}
+                key={session.sessionId}
+                sessionId={session.sessionId}
+                currentStepIndex={session.currentStepIndex}
+                plannedSteps={session.plannedSteps}
+                onCommandDetected={handleVoiceCommand}
+                onStepAutoChanged={handleStepAutoChanged}
+                onSessionStateUpdated={handleSessionStateUpdated}
+              />
+            </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
-      {/* Planning Result Modal - V2에서는 cleaned_recipes에 저장되어 있음 */}
-      {showPlanModal && (
-        <div className="modal show d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <div className="modal-dialog modal-dialog-centered">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">Planning 정보</h5>
+      {/* Quick Actions (Moved to bottom) */}
+      {
+        session.status !== 'completed' && (
+          <div className="card shadow mt-4">
+            <div className="card-header bg-secondary text-white">
+              <h6 className="mb-0">빠른 실행</h6>
+            </div>
+            <div className="card-body">
+              <div className="d-grid gap-2">
                 <button
-                  type="button"
-                  className="btn-close"
-                  onClick={() => setShowPlanModal(false)}
-                ></button>
-              </div>
-              <div className="modal-body">
-                <p className="text-muted">
-                  이 레시피는 V2 아키텍처를 사용하여 미리 계획되었습니다.
-                </p>
-                <ul>
-                  <li>총 단계: {session.totalSteps}개</li>
-                  <li>Cleaned Recipe ID: {session.cleanedRecipeId}</li>
-                  <li>음성 최적화 스크립트 준비 완료</li>
-                </ul>
-              </div>
-              <div className="modal-footer">
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setShowPlanModal(false)}
+                  className="btn btn-outline-primary btn-sm"
+                  onClick={() => setShowPlanModal(true)}
                 >
-                  닫기
+                  📋 Planning 결과 보기
+                </button>
+                <button
+                  className="btn btn-outline-secondary btn-sm"
+                  onClick={handleEndSession}
+                >
+                  🏠 요리 종료
                 </button>
               </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )
+      }
+
+      {/* Planning Result Modal - V2에서는 cleaned_recipes에 저장되어 있음 */}
+      {
+        showPlanModal && (
+          <div className="modal show d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+            <div className="modal-dialog modal-dialog-centered">
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h5 className="modal-title">Planning 정보</h5>
+                  <button
+                    type="button"
+                    className="btn-close"
+                    onClick={() => setShowPlanModal(false)}
+                  ></button>
+                </div>
+                <div className="modal-body">
+                  <p className="text-muted">
+                    이 레시피는 V2 아키텍처를 사용하여 미리 계획되었습니다.
+                  </p>
+                  <ul>
+                    <li>총 단계: {session.totalSteps}개</li>
+                    <li>Cleaned Recipe ID: {session.cleanedRecipeId}</li>
+                    <li>음성 최적화 스크립트 준비 완료</li>
+                  </ul>
+                </div>
+                <div className="modal-footer">
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => setShowPlanModal(false)}
+                  >
+                    닫기
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      }
+    </div >
   );
 }
