@@ -335,4 +335,4 @@ frontend/dist/
 
 # Test data
 voice/test/*.wav
-data/recipes/recipe_*.json
+data/recipes/recipe_*.jsondb_dumps/.-rf voice/
