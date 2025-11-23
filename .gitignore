@@ -42,3 +42,8 @@ Thumbs.db
 # Temporary files
 *.tmp
 temp/
+
+# FAISS index files (shared via Git for team collaboration)
+rag-server/storage/
+!rag-server/storage/faiss.index
+!rag-server/storage/metadata.json

@@ -33,7 +33,36 @@ router.get('/', async (req, res) => {
   }
 });
 
-// 레시피 상세
+// 레시피 상세 (cleaned recipe)
+router.get('/:recipeId/cleaned', async (req, res) => {
+  try {
+    const { recipeId } = req.params;
+    
+    console.log(`[Recipe API] Getting cleaned recipe: ${recipeId}`);
+    
+    const cleanedRecipe = await cleanedRecipeService.getCleanedRecipe(recipeId);
+    
+    if (!cleanedRecipe) {
+      return res.status(404).json({ 
+        error: 'Cleaned recipe not found',
+        message: `Recipe ${recipeId} has not been cleaned yet. Run cleaning first.`
+      });
+    }
+    
+    res.json({
+      success: true,
+      recipe: cleanedRecipe
+    });
+  } catch (error: any) {
+    console.error('[Recipe API] Error fetching cleaned recipe:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch cleaned recipe',
+      message: error.message 
+    });
+  }
+});
+
+// 레시피 상세 (raw recipe)
 router.get('/:recipeId', async (req, res) => {
   try {
     const recipe = await recipeService.getRecipeById(req.params.recipeId);
@@ -115,6 +144,162 @@ router.get('/search/cleaned', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to search recipes'
+    });
+  }
+});
+
+// 레시피 검색 (RAG - Phase 3)
+router.get('/search/rag', async (req, res) => {
+  try {
+    const query = req.query.q as string;
+    const top_k = parseInt(req.query.top_k as string) || 5;
+
+    if (!query) {
+      return res.status(400).json({ error: 'Query parameter required' });
+    }
+
+    console.log(`[RAG Search] Searching with query: "${query}" (top_k=${top_k})`);
+
+    // Call Python RAG search script via subprocess
+    const { spawn } = await import('child_process');
+    const path = await import('path');
+    const { fileURLToPath } = await import('url');
+    const fs = await import('fs');
+    
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    const ragServerDir = path.join(__dirname, '../../../rag-server');
+    const tempScriptPath = path.join(ragServerDir, 'temp_search.py');
+
+    // Create temporary Python script to avoid shell injection
+    const pythonScript = `
+import sys
+import json
+from pathlib import Path
+
+# Add rag-server to path
+sys.path.insert(0, r'${ragServerDir.replace(/\\/g, '/')}')
+
+from tools.search import search_with_details
+
+try:
+    query = r'${query.replace(/'/g, "\\'").replace(/\\/g, '\\\\')}'
+    top_k = ${top_k}
+    results = search_with_details(query, top_k=top_k)
+    print(json.dumps(results, ensure_ascii=False))
+except Exception as e:
+    print(json.dumps({"error": str(e)}), file=sys.stderr)
+    sys.exit(1)
+`;
+
+    fs.writeFileSync(tempScriptPath, pythonScript, 'utf-8');
+
+    try {
+      const pythonProcess = spawn('python', [tempScriptPath], {
+        cwd: ragServerDir,
+        stdio: ['pipe', 'pipe', 'pipe']
+      });
+
+      let output = '';
+      let errorOutput = '';
+
+      pythonProcess.stdout.on('data', (data) => {
+        output += data.toString();
+      });
+
+      pythonProcess.stderr.on('data', (data) => {
+        errorOutput += data.toString();
+      });
+
+      await new Promise<void>((resolve, reject) => {
+        pythonProcess.on('close', (code) => {
+          if (code !== 0) {
+            reject(new Error(`Python script exited with code ${code}: ${errorOutput}`));
+          } else {
+            resolve();
+          }
+        });
+      });
+
+      // Clean up temp file
+      try {
+        fs.unlinkSync(tempScriptPath);
+      } catch (e) {
+        // Ignore cleanup errors
+      }
+
+      const searchResults = JSON.parse(output.trim());
+
+      if (searchResults.error) {
+        throw new Error(searchResults.error);
+      }
+
+      // Get full recipe details from database
+      if (!Array.isArray(searchResults) || searchResults.length === 0) {
+        return res.json({
+          success: true,
+          query,
+          count: 0,
+          hasResults: false,
+          recipes: [],
+          searchMethod: 'rag'
+        });
+      }
+
+      const recipeIds = searchResults.map((r: any) => r.recipe_id);
+      const placeholders = recipeIds.map((_: any, i: number) => `$${i + 1}`).join(', ');
+
+      const recipesResult = await pool.query(
+        `SELECT cr.id, cr.recipe_id, cr.title, cr.opening_remark,
+                r.difficulty, r.cook_time, r.servings,
+                (SELECT COUNT(*) FROM cleaned_steps WHERE cleaned_recipe_id = cr.id) as total_steps
+         FROM cleaned_recipes cr
+         LEFT JOIN recipes r ON cr.recipe_id = r.recipe_id
+         WHERE cr.recipe_id IN (${placeholders})
+         ORDER BY array_position(ARRAY[${placeholders}]::text[], cr.recipe_id)`,
+        [...recipeIds, ...recipeIds]
+      );
+
+      // Merge with search scores
+      const scoreMap = new Map(searchResults.map((r: any) => [r.recipe_id, r.score]));
+      const recipes = recipesResult.rows.map((row: any) => ({
+        id: row.id,
+        recipeId: row.recipe_id,
+        title: row.title,
+        openingRemark: row.opening_remark,
+        difficulty: row.difficulty,
+        cookTime: row.cook_time,
+        servings: row.servings,
+        totalSteps: row.total_steps,
+        searchScore: scoreMap.get(row.recipe_id) || 0
+      }));
+
+      console.log(`[RAG Search] Found ${recipes.length} recipes`);
+
+      res.json({
+        success: true,
+        query,
+        count: recipes.length,
+        hasResults: recipes.length > 0,
+        recipes,
+        searchMethod: 'rag'
+      });
+    } finally {
+      // Ensure temp file is cleaned up
+      try {
+        if (fs.existsSync(tempScriptPath)) {
+          fs.unlinkSync(tempScriptPath);
+        }
+      } catch (e) {
+        // Ignore cleanup errors
+      }
+    }
+  } catch (error: any) {
+    console.error('[RAG Search] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to search recipes with RAG',
+      message: error.message
     });
   }
 });

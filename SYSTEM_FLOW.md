@@ -1,32 +1,42 @@
-# 요리조리(Yorijori) V2 시스템 전체 흐름
+# 요리조리(Yorijori) V3 시스템 전체 흐름
 
 ## 1. 초기 설정 (1회 실행)
 
 ```
+npm run import
+    ↓
+Import Script: Raw Recipe JSON 로드
+    ↓
+recipes 테이블에 raw_data (JSONB) 저장
+    ↓
 npm run clean:all
     ↓
-RecipeService: Raw Recipe DB (102개) 로드
+CleanedRecipeService: raw_data에서 레시피 정보 추출
     ↓
-PlanningService: GPT-4o로 각 레시피 Planning 실행
-    - opening_remark, closing_remark 생성
-    - 각 단계별 script, retry_script, pause_hint, timer 생성
+PlanningService: gpt-5-nano로 각 레시피 Planning 실행
+    - meta (title, description, servings, time, difficulty)
+    - ingredients (main, sub)
+    - tools
+    - process (단계별 상세 정보)
     ↓
 CleanedRecipeService: PostgreSQL 저장
-    - cleaned_recipes 테이블
+    - cleaned_recipes 테이블 (planning_result JSONB)
     - cleaned_steps 테이블 (단계별 스크립트)
 ```
 
 ## 2. 레시피 검색 및 선택
 
-### 2-1. 기존 레시피 검색
+### 2-1. 레시피 검색 (RAG 또는 Keyword)
 ```
-Frontend: DashboardV2.tsx
+Frontend: DashboardV3.tsx
     ↓
 사용자 검색어 입력: "김치"
     ↓
-API: GET /api/recipes/search/cleaned?q=김치
+API: GET /api/recipes/search/rag?q=김치&top_k=10
     ↓
-Backend: cleaned_recipes 테이블 ILIKE 검색
+Backend: RAG 검색 또는 Keyword 검색
+    - RAG: FAISS 인덱스에서 의미 기반 검색
+    - Keyword: cleaned_recipes 테이블 ILIKE 검색
     ↓
 Frontend: RecipeCard 리스트 렌더링
 ```
@@ -38,13 +48,13 @@ Frontend: "AI로 새 레시피 생성하기" 버튼 클릭
 API: POST /api/recipes/generate { prompt: "스테이크" }
     ↓
 Backend NanoService:
-    1. GPT-3.5-turbo로 레시피 생성
+    1. gpt-5-nano로 레시피 생성
     2. recipes 테이블 저장 (recipe_id: recipe_gen_123)
-    3. ingredients, steps 테이블 저장
+    3. raw_data (JSONB)에 전체 레시피 저장
     ↓
 Backend CleanedRecipeService:
-    4. PlanningService 자동 실행 (GPT-4o)
-    5. cleaned_recipes, cleaned_steps 저장
+    4. PlanningService 자동 실행 (gpt-5-nano)
+    5. cleaned_recipes (planning_result JSONB), cleaned_steps 저장
     ↓
 Frontend: 생성 완료 → DashboardV2에서 즉시 검색 가능
 ```
@@ -103,7 +113,7 @@ RealtimeServiceV2:
 Frontend: 연결 완료 → 음성 상호작용 준비
 ```
 
-## 5. 음성 명령 실행 (LangChain 자동 처리)
+## 5. 음성 명령 실행 (MCP Protocol 자동 처리)
 
 ```
 사용자: "다음 단계로 가줘" (음성 입력)
@@ -112,31 +122,28 @@ Frontend: useAudioRecorder → PCM16 음성 데이터
     ↓
 WebSocket: { type: 'audio_chunk', audio: base64 }
     ↓
-Backend RealtimeServiceV2 → OpenAI Realtime API
+Backend RealtimeServiceV3 → OpenAI Realtime API
     ↓
 OpenAI GPT-4o-realtime:
     1. 음성 → 텍스트 변환
     2. Transcript: "다음 단계로 가줘"
+    3. Native Tool Calling: navigate_next_step() 자동 호출
     ↓
 Backend: 'user_transcription' 이벤트 emit
     ↓
-RealtimeServiceV2 → LangChainAgent.processUserInput()
+RealtimeServiceV3 → MCP Tool Execution:
+    1. navigate_next_step(sessionId) 실행
     ↓
-LangChainAgent:
-    1. GPT-3.5-turbo로 Intent Detection
-       → { action: "NEXT_STEP" }
-    2. NavigationTool.execute(sessionId, "next")
-    ↓
-CookingAgentV2.nextStep():
+CookingAgentV3.nextStep():
     1. session.currentStepIndex++
     2. session_states 테이블에 로그 저장
     3. Node.js Map 세션 업데이트
-    4. 새 단계 반환: plannedSteps[1]
+    4. 새 단계 반환: process[1] (planning_result에서)
     ↓
-RealtimeServiceV2:
-    1. System Prompt 재생성 (새 단계 스크립트)
+RealtimeServiceV3:
+    1. System Prompt 재생성 (새 단계 정보)
     2. OpenAI Realtime API 업데이트
-    3. 'langchain_response' 이벤트 emit
+    3. 'tool_executed' 이벤트 emit
     ↓
 Backend ServerV2 → Frontend WebSocket:
     { type: 'session_state_updated', currentStepIndex: 1 }

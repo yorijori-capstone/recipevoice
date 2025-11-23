@@ -1,13 +1,13 @@
-# 요리조리 (Yorijori) V2 - AI 음성 요리 가이드
+# 요리조리 (Yorijori) V3 - AI 음성 요리 가이드
 
-GPT-4o Realtime API를 활용한 실시간 음성 요리 가이드 시스템
+GPT-5-nano 및 GPT-4o Realtime API를 활용한 실시간 음성 요리 가이드 시스템
 
 ## ⚡ 빠른 시작 (5분)
 
 ```bash
 # 1. PostgreSQL 데이터베이스 생성 및 복원
-psql -U postgres -c "CREATE DATABASE yorijori"
-psql -U postgres -d yorijori < db_dumps/yorijori_full_backup.sql
+psql -U postgres -c "CREATE DATABASE recipevoice"
+psql -U recipevoice -d recipevoice < db_dumps/recipevoice_backup.sql
 
 # 2. Backend 실행
 cd backend
@@ -24,10 +24,12 @@ npm run dev
 
 ## 📋 주요 기능
 
-- ✅ **AI 레시피 생성**: GPT-4o-mini로 맞춤 레시피 생성
+- ✅ **AI 레시피 생성**: gpt-5-nano로 맞춤 레시피 생성
+- ✅ **레시피 정제**: gpt-5-nano로 원본 데이터 구조화 및 정제
+- ✅ **RAG 검색**: FAISS 기반 의미 기반 레시피 검색
 - ✅ **음성 요리 가이드**: GPT-4o-realtime으로 실시간 음성 상호작용
 - ✅ **0.1초 빠른 시작**: 사전 Planning으로 즉시 요리 시작
-- ✅ **자동 명령 처리**: LangChain으로 자연어 이해
+- ✅ **자동 명령 처리**: MCP Protocol로 자연어 이해
 - ✅ **실시간 동기화**: WebSocket으로 UI 자동 업데이트
 - ✅ **세션 복구**: 페이지 새로고침 후에도 이어서 요리
 
@@ -52,9 +54,10 @@ npm run dev
 ## 📊 성능
 
 - **세션 시작**: 0.1초 (Planning 사전 완료)
-- **Planning 시간**: 30초/레시피 (1회만 실행)
+- **Planning 시간**: 30초/레시피 (1회만 실행, gpt-5-nano)
 - **음성 응답**: 실시간 (GPT-4o-realtime)
 - **레시피 개수**: 102개 (+ AI 생성 무제한)
+- **검색 방식**: RAG (의미 기반) + Keyword (키워드)
 
 ## 📚 문서
 
@@ -75,9 +78,10 @@ npm run dev
 - Node.js + Express
 - TypeScript
 - PostgreSQL
-- OpenAI API (GPT-4o-realtime, GPT-4o-mini)
-- LangChain
+- OpenAI API (GPT-4o-realtime, gpt-5-nano)
+- MCP Protocol (Model Context Protocol)
 - WebSocket (ws)
+- FAISS (Vector Search)
 
 ## 🔧 개발 명령어
 
@@ -106,27 +110,34 @@ npm run clean:all
 ## 📦 데이터베이스
 
 ### 테이블 구조:
-- `recipes` - 원본 레시피 (102개)
+- `recipes` - 원본 레시피 (102개) + `raw_data` (JSONB)
 - `ingredients` - 재료 목록
 - `steps` - 원본 조리 단계
-- `cleaned_recipes` - Planning 결과 (opening/closing remark)
-- `cleaned_steps` - 단계별 스크립트 (GPT-4o-mini 생성)
+- `cleaned_recipes` - Planning 결과 (planning_result JSONB)
+- `cleaned_steps` - 단계별 스크립트 (gpt-5-nano 생성)
 - `cooking_sessions` - 세션 메타데이터
 - `session_states` - 세션 상태 히스토리
 
 ### 데이터 복원:
 ```bash
 # 전체 DB 복원 (추천)
-psql -U postgres -d yorijori < db_dumps/yorijori_full_backup.sql
+psql -U recipevoice -d recipevoice < db_dumps/recipevoice_backup.sql
 
 # 스키마만 생성
-psql -U postgres -d yorijori -f backend/schema.sql
+psql -U recipevoice -d recipevoice -f backend/schema.sql
+
+# 마이그레이션 실행
+psql -U recipevoice -d recipevoice -f backend/migrations/001_create_cleaned_recipes.sql
+psql -U recipevoice -d recipevoice -f backend/migrations/002_create_sessions.sql
+psql -U recipevoice -d recipevoice -f backend/migrations/004_add_raw_data_column.sql
+psql -U recipevoice -d recipevoice -f backend/migrations/005_grant_permissions.sql
 ```
 
 ## 🎯 사용 방법
 
 ### 1. 레시피 검색
 - 홈페이지에서 "김치" 검색
+- RAG 기반 의미 검색 또는 키워드 검색
 - 102개 레시피에서 즉시 검색
 
 ### 2. AI 레시피 생성
@@ -145,7 +156,7 @@ psql -U postgres -d yorijori -f backend/schema.sql
 ### Backend (.env)
 ```env
 OPENAI_API_KEY=your_openai_api_key
-DATABASE_URL=postgresql://postgres:password@localhost:5432/yorijori
+DATABASE_URL=postgresql://recipevoice:recipevoice@localhost:5432/recipevoice
 PORT=3001
 NODE_ENV=development
 ```
@@ -159,10 +170,34 @@ VITE_WS_URL=ws://localhost:3001
 
 ## 🤝 협업 가이드
 
-1. **DB 공유**: `db_dumps/yorijori_full_backup.sql` 사용
-2. **코드 리뷰**: Pull Request 생성
-3. **이슈 트래킹**: GitHub Issues 사용
-4. **문서 업데이트**: 기능 추가 시 문서도 함께 업데이트
+### 팀 동기화 방법
+
+1. **최신 코드 받기**
+   ```bash
+   git pull origin main
+   ```
+
+2. **데이터베이스 복원**
+   ```bash
+   # SQL 형식 덤프 복원
+   psql -U recipevoice -d recipevoice < db_dumps/recipevoice_backup.sql
+   
+   # 또는 Binary 형식 덤프 복원
+   pg_restore -U recipevoice -d recipevoice -c db_dumps/recipevoice_backup.dump
+   ```
+
+3. **FAISS Index 파일**
+   ```bash
+   # Git에서 자동으로 받아짐 (rag-server/storage/faiss.index)
+   # 또는 직접 구축: cd rag-server && python build_index.py
+   ```
+
+### 개발 규칙
+
+1. **코드 리뷰**: Pull Request 생성
+2. **이슈 트래킹**: GitHub Issues 사용
+3. **문서 업데이트**: 기능 추가 시 문서도 함께 업데이트
+4. **데이터 동기화**: DB 덤프 및 Index 파일은 Git을 통해 공유
 
 ## 📝 개발 워크플로우
 
@@ -203,9 +238,10 @@ brew services start postgresql
 ### Planning 데이터 없음
 ```bash
 # DB 덤프 복원 또는
-psql -U postgres -d yorijori < db_dumps/yorijori_full_backup.sql
+psql -U recipevoice -d recipevoice < db_dumps/recipevoice_backup.sql
 
-# Planning 실행 (50분 소요)
+# Planning 실행 (gpt-5-nano 사용, 약 50분 소요)
+cd backend
 npm run clean:all
 ```
 

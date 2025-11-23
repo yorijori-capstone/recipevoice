@@ -4,7 +4,7 @@
  */
 
 import { EventEmitter } from 'events';
-import { CleanedRecipeService, CleanedRecipe, PlannedStep, Ingredient } from '../services/cleanedRecipeService.js';
+import { CleanedRecipeService, CleanedRecipe, PlannedStep, ProcessStep, Ingredient, PlanningOutput } from '../services/cleanedRecipeService.js';
 import { SessionService, CookingSessionData } from '../services/sessionService.js';
 
 // ============================================================================
@@ -18,7 +18,9 @@ export interface CookingSession {
   title: string;
   openingRemark: string;
   closingRemark: string;
-  plannedSteps: PlannedStep[];
+  plannedSteps: PlannedStep[];  // Legacy - for backward compatibility
+  process: ProcessStep[];  // 🆕 Direct access to process array from planning_result
+  planning_result?: PlanningOutput;  // 🆕 Full planning result with meta, ingredients, tools, process
   currentStepIndex: number;
   viewingStepIndex: number;
   totalSteps: number;
@@ -69,6 +71,10 @@ export class CookingAgentV3 extends EventEmitter {
       );
 
       // Step 3: Create in-memory session
+      // 🆕 Use process array from planning_result (primary source)
+      const processSteps = cleanedRecipe.process || [];
+      const totalSteps = processSteps.length || cleanedRecipe.planned_steps.length;
+      
       const session: CookingSession = {
         sessionId: sessionData.session_id,
         recipeId,
@@ -76,10 +82,12 @@ export class CookingAgentV3 extends EventEmitter {
         title: cleanedRecipe.title,
         openingRemark: cleanedRecipe.opening_remark,
         closingRemark: cleanedRecipe.closing_remark,
-        plannedSteps: cleanedRecipe.planned_steps,
+        plannedSteps: cleanedRecipe.planned_steps,  // Legacy
+        process: processSteps,  // 🆕 Direct access to process array
+        planning_result: cleanedRecipe.planning_result,  // 🆕 Full planning result for realtime context
         currentStepIndex: 0,
         viewingStepIndex: 0,
-        totalSteps: cleanedRecipe.planned_steps.length,
+        totalSteps,
         status: 'active',
         ingredients: cleanedRecipe.ingredients,  // 🆕 재료 목록 추가
         startedAt: new Date()
@@ -113,13 +121,23 @@ export class CookingAgentV3 extends EventEmitter {
   }
 
   /**
-   * Get current step
+   * Get current step (Legacy - returns PlannedStep for backward compatibility)
    */
   getCurrentStep(sessionId: string): PlannedStep | undefined {
     const session = this.sessions.get(sessionId);
     if (!session) return undefined;
 
     return session.plannedSteps[session.currentStepIndex];
+  }
+
+  /**
+   * 🆕 Get current process step (from planning_result.process)
+   */
+  getCurrentProcessStep(sessionId: string): ProcessStep | undefined {
+    const session = this.sessions.get(sessionId);
+    if (!session) return undefined;
+
+    return session.process[session.currentStepIndex];
   }
 
   /**

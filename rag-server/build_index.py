@@ -32,72 +32,255 @@ def get_db_connection():
 
 
 def fetch_recipes() -> List[Dict[str, Any]]:
-    """Fetch all recipes with ingredients and steps."""
-    print("📂 Fetching recipes from PostgreSQL...")
+    """Fetch cleaned recipes with planning_result from cleaned_recipes table."""
+    print("📂 Fetching cleaned recipes from PostgreSQL...")
     
     with get_db_connection() as conn, conn.cursor() as cur:
-        # Get all recipes
-        cur.execute("SELECT * FROM recipes ORDER BY recipe_id")
-        recipes = [dict(row) for row in cur.fetchall()]
+        # Get all cleaned recipes with planning_result
+        cur.execute("""
+            SELECT 
+                cr.recipe_id,
+                cr.title,
+                cr.planning_result
+            FROM cleaned_recipes cr
+            ORDER BY cr.recipe_id
+        """)
         
-        print(f"✅ Found {len(recipes)} recipes")
-        
-        # Get ingredients and steps for each recipe
-        for recipe in recipes:
+        recipes = []
+        for row in cur.fetchall():
+            recipe = dict(row)
             recipe_id = recipe['recipe_id']
             
-            # Ingredients
-            cur.execute(
-                "SELECT name, quantity FROM ingredients WHERE recipe_id = %s ORDER BY display_order",
-                (recipe_id,)
-            )
-            recipe['ingredients'] = [dict(row) for row in cur.fetchall()]
+            # Parse planning_result JSONB
+            planning_result = recipe.get('planning_result', {})
+            if isinstance(planning_result, str):
+                planning_result = json.loads(planning_result)
             
-            # Steps
-            cur.execute(
-                "SELECT description FROM steps WHERE recipe_id = %s ORDER BY step_number",
-                (recipe_id,)
-            )
-            recipe['steps'] = [dict(row) for row in cur.fetchall()]
+            # Extract data from planning_result
+            recipe['planning_result'] = planning_result
+            recipe['meta'] = planning_result.get('meta', {})
+            recipe['ingredients'] = planning_result.get('ingredients', {})
+            recipe['tools'] = planning_result.get('tools', [])
+            recipe['process'] = planning_result.get('process', [])
+            
+            recipes.append(recipe)
         
+        print(f"✅ Found {len(recipes)} cleaned recipes")
         return recipes
 
 
-def create_recipe_text(recipe: Dict[str, Any]) -> str:
+def create_summary_chunk(recipe: Dict[str, Any]) -> str:
     """
-    Create searchable text from recipe.
-    
-    Format:
-    제목: [title]
-    재료: [ingredient1], [ingredient2], ...
-    조리법: [step1] [step2] ...
-    난이도: [difficulty]
-    조리시간: [cook_time]
+    Type A: Summary Chunk
+    목적: 탐색형 질문 대응 ("저녁 메뉴 추천해줘", "간단한 반찬 뭐 있어?")
+    Uses cleaned data from planning_result.meta
     """
-    title = recipe.get('title', '')
+    meta = recipe.get('meta', {})
+    title = meta.get('title', '') or recipe.get('title', '')
+    description = meta.get('description', '') or f"{title} 레시피입니다."
+    servings = meta.get('servings', '')
+    time_estimate = meta.get('time_estimate', '')
+    difficulty = meta.get('difficulty', '')
     
-    # Ingredients
-    ingredients = recipe.get('ingredients', [])
-    ingredient_text = ', '.join([f"{ing['name']} {ing['quantity']}" for ing in ingredients])
-    
-    # Steps
-    steps = recipe.get('steps', [])
-    steps_text = ' '.join([step['description'] for step in steps])
-    
-    # Metadata
-    difficulty = recipe.get('difficulty', '')
-    cook_time = recipe.get('cook_time', '')
-    servings = recipe.get('servings', '')
-    
-    # Combine
-    text = f"""제목: {title}
-재료: {ingredient_text}
-조리법: {steps_text}
-난이도: {difficulty}
-조리시간: {cook_time}
-인분: {servings}"""
+    text = f"""[요리명: {title}]
+설명: {description}
+특징: {servings}인분, 조리시간 {time_estimate}분, 난이도 {difficulty}."""
     
     return text
+
+
+def create_ingredient_chunk(recipe: Dict[str, Any]) -> str:
+    """
+    Type B: Ingredient Chunk
+    목적: 재료 기반 검색 대응 ("연근으로 할 수 있는 요리 있어?", "냉장고 파먹기")
+    Uses cleaned data from planning_result.ingredients.main/sub
+    """
+    meta = recipe.get('meta', {})
+    title = meta.get('title', '') or recipe.get('title', '')
+    ingredients_data = recipe.get('ingredients', {})
+    
+    # Get main and sub ingredients from cleaned data
+    main_ingredients_list = ingredients_data.get('main', [])
+    sub_ingredients_list = ingredients_data.get('sub', [])
+    
+    # Format main ingredients
+    main_ingredients = []
+    for ing in main_ingredients_list:
+        name = ing.get('name', '').strip()
+        amount = ing.get('amount', '')
+        unit = ing.get('unit', '').strip()
+        if name:
+            if amount and unit:
+                main_ingredients.append(f"{name} {amount}{unit}")
+            elif amount:
+                main_ingredients.append(f"{name} {amount}")
+            else:
+                main_ingredients.append(name)
+    
+    # Format sub ingredients
+    sub_ingredients = []
+    for ing in sub_ingredients_list:
+        name = ing.get('name', '').strip()
+        amount = ing.get('amount', '')
+        unit = ing.get('unit', '').strip()
+        if name:
+            if amount and unit:
+                sub_ingredients.append(f"{name} {amount}{unit}")
+            elif amount:
+                sub_ingredients.append(f"{name} {amount}")
+            else:
+                sub_ingredients.append(name)
+    
+    main_text = ', '.join(main_ingredients) if main_ingredients else '(주재료 없음)'
+    sub_text = ', '.join(sub_ingredients) if sub_ingredients else '(양념 없음)'
+    
+    text = f"""[요리명: {title} - 필요 재료 목록]
+주재료: {main_text}
+양념 및 부재료: {sub_text}"""
+    
+    return text
+
+
+def create_process_chunk(recipe: Dict[str, Any], max_tokens: int = 500) -> List[str]:
+    """
+    Type C: Process Chunk
+    목적: 구체적 방법 질문 대응 ("연근조림 어떻게 만들어?", "불 조절은 어떻게 해?")
+    전략: 전체 과정이 500토큰 미만이면 하나로 합치고, 길면 phase 단위로 분할
+    Uses cleaned data from planning_result.process[].description
+    """
+    meta = recipe.get('meta', {})
+    title = meta.get('title', '') or recipe.get('title', '')
+    process_steps = recipe.get('process', [])
+    
+    if not process_steps:
+        return []
+    
+    # Get descriptions from cleaned process steps
+    step_descriptions = []
+    for step in process_steps:
+        desc = step.get('description', '').strip()
+        if desc:
+            step_descriptions.append(desc)
+    
+    if not step_descriptions:
+        return []
+    
+    # Simple token estimation: ~4 tokens per Korean character
+    total_chars = sum(len(desc) for desc in step_descriptions)
+    estimated_tokens = total_chars * 4
+    
+    chunks = []
+    
+    if estimated_tokens < max_tokens:
+        # Single chunk for all steps
+        steps_text = '\n'.join([f"{i+1}. {desc}" for i, desc in enumerate(step_descriptions)])
+        chunk = f"""[요리명: {title} - 조리 방법]
+{steps_text}"""
+        chunks.append(chunk)
+    else:
+        # Split by phase (preparation, cooking, finishing) if available
+        # Group steps by phase
+        phases = {}
+        for i, step in enumerate(process_steps):
+            phase = step.get('phase', 'cooking')
+            if phase not in phases:
+                phases[phase] = []
+            phases[phase].append((i, step.get('description', '').strip()))
+        
+        # Create chunks by phase
+        for phase, phase_steps in phases.items():
+            if not phase_steps:
+                continue
+            
+            phase_names = {
+                'preparation': '준비',
+                'cooking': '조리',
+                'finishing': '마무리'
+            }
+            phase_name = phase_names.get(phase, phase)
+            
+            steps_text = '\n'.join([f"{idx+1}. {desc}" for idx, desc in phase_steps if desc])
+            if steps_text:
+                chunk = f"""[요리명: {title} - {phase_name} 과정]
+{steps_text}"""
+                chunks.append(chunk)
+        
+        # If no phase grouping worked, fallback to size-based chunking
+        if not chunks:
+            chunk_size = 5
+            for i in range(0, len(step_descriptions), chunk_size):
+                chunk_steps = step_descriptions[i:i+chunk_size]
+                steps_text = '\n'.join([f"{i+j+1}. {desc}" for j, desc in enumerate(chunk_steps)])
+                chunk = f"""[요리명: {title} - 조리 방법 (단계 {i+1}-{min(i+chunk_size, len(step_descriptions))})]
+{steps_text}"""
+                chunks.append(chunk)
+    
+    return chunks
+
+
+def create_chunks_for_recipe(recipe: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    Create all chunk types for a recipe from cleaned data.
+    Returns list of chunks with metadata.
+    """
+    chunks = []
+    recipe_id = recipe.get('recipe_id', '')
+    meta = recipe.get('meta', {})
+    title = meta.get('title', '') or recipe.get('title', '')
+    
+    # Type A: Summary Chunk
+    summary_text = create_summary_chunk(recipe)
+    chunks.append({
+        'text': summary_text,
+        'type': 'summary',
+        'recipe_id': recipe_id,
+        'title': title,
+        'metadata': {
+            'difficulty': meta.get('difficulty', ''),
+            'time_estimate': meta.get('time_estimate', ''),
+            'servings': meta.get('servings', '')
+        }
+    })
+    
+    # Type B: Ingredient Chunk
+    ingredient_text = create_ingredient_chunk(recipe)
+    ingredients_data = recipe.get('ingredients', {})
+    
+    # Extract ingredient names from cleaned data
+    ingredient_names = []
+    for ing in ingredients_data.get('main', []):
+        name = ing.get('name', '').strip()
+        if name:
+            ingredient_names.append(name)
+    for ing in ingredients_data.get('sub', []):
+        name = ing.get('name', '').strip()
+        if name:
+            ingredient_names.append(name)
+    
+    chunks.append({
+        'text': ingredient_text,
+        'type': 'ingredients',
+        'recipe_id': recipe_id,
+        'title': title,
+        'metadata': {
+            'ingredient_names': ingredient_names
+        }
+    })
+    
+    # Type C: Process Chunks (may be multiple)
+    process_chunks = create_process_chunk(recipe)
+    for i, process_text in enumerate(process_chunks):
+        chunks.append({
+            'text': process_text,
+            'type': 'process',
+            'recipe_id': recipe_id,
+            'title': title,
+            'metadata': {
+                'chunk_index': i
+            }
+        })
+    
+    return chunks
 
 
 def build_faiss_index():
@@ -119,25 +302,35 @@ def build_faiss_index():
         print("❌ 레시피가 없습니다!")
         return
     
-    # 3. Create searchable texts
-    print("\n📝 검색 가능한 텍스트 생성 중...")
-    texts = []
-    metadata = []
+    # 3. Create chunks for each recipe (Phase 3: New Chunking Strategy)
+    print("\n📝 청크 생성 중 (Type A: Summary, Type B: Ingredients, Type C: Process)...")
+    chunks = []
+    chunk_metadata = []
     
     for i, recipe in enumerate(recipes, 1):
-        text = create_recipe_text(recipe)
-        texts.append(text)
+        recipe_chunks = create_chunks_for_recipe(recipe)
         
-        metadata.append({
-            'recipe_id': recipe['recipe_id'],
-            'title': recipe['title'],
-            'text_preview': text[:200] + '...'
-        })
+        for chunk in recipe_chunks:
+            chunks.append(chunk['text'])
+            chunk_metadata.append({
+                'recipe_id': chunk['recipe_id'],
+                'title': chunk['title'],
+                'type': chunk['type'],
+                'metadata': chunk['metadata'],
+                'text_preview': chunk['text'][:200] + '...'
+            })
         
         if i % 20 == 0:
-            print(f"   진행: {i}/{len(recipes)}")
+            total_chunks = len(chunks)
+            print(f"   진행: {i}/{len(recipes)} 레시피, {total_chunks}개 청크 생성됨")
     
-    print(f"✅ {len(texts)}개의 텍스트 생성 완료\n")
+    print(f"✅ {len(chunks)}개의 청크 생성 완료 (레시피 {len(recipes)}개)")
+    print(f"   - Type A (Summary): {sum(1 for m in chunk_metadata if m['type'] == 'summary')}개")
+    print(f"   - Type B (Ingredients): {sum(1 for m in chunk_metadata if m['type'] == 'ingredients')}개")
+    print(f"   - Type C (Process): {sum(1 for m in chunk_metadata if m['type'] == 'process')}개\n")
+    
+    texts = chunks
+    metadata = chunk_metadata
     
     # 4. Generate embeddings
     print("🧠 임베딩 생성 중 (시간이 걸립니다...)...")

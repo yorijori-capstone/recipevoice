@@ -34,7 +34,7 @@
 - ✅ 102개 레시피 사전 처리
 
 ### Phase 3: AI Recipe Generation
-- ✅ NanoService (GPT-3.5-turbo)
+- ✅ NanoService (gpt-5-nano)
 - ✅ POST /api/recipes/generate
 - ✅ POST /api/recipes/recommend
 - ✅ RecipeGenerateModal 컴포넌트
@@ -137,7 +137,7 @@ last_project/
 
 ### 2. AI 레시피 생성
 - 사용자 자연어 입력
-- GPT-3.5-turbo로 생성
+- gpt-5-nano로 생성
 - 자동 planning + 저장
 
 ### 3. 검색 기능
@@ -155,10 +155,10 @@ last_project/
 - 요리 완료 축하 메시지
 - 자연스러운 대화 흐름
 
-### 6. LangChain Integration
-- Intent Detection (GPT-3.5)
+### 6. LangChain Integration (V2, V3에서 제거됨)
+- Intent Detection (GPT-3.5) - V3에서 MCP Protocol로 대체
 - Tool Execution (자동)
-- Response Generation (GPT-4o)
+- Response Generation (GPT-4o-realtime)
 
 ### 7. Real-time WebSocket V2
 - LangChain response events
@@ -409,8 +409,8 @@ created_at   TIMESTAMP DEFAULT NOW()
 - 확장성 좋음
 
 ### 4. GPT Model Selection
-- GPT-3.5: 빠르고 저렴 (레시피 생성)
-- GPT-4o: 정확하고 복잡 (Planning)
+- gpt-5-nano: 빠르고 저렴 (레시피 생성 및 정제)
+- GPT-4o-realtime: 실시간 음성 상호작용
 - 적재적소 사용이 중요
 
 ---
@@ -456,8 +456,8 @@ created_at   TIMESTAMP DEFAULT NOW()
 **✅ 프로젝트 완성도: 98%**
 
 **동작하는 기능**:
-1. ✅ 레시피 검색 (키워드)
-2. ✅ AI 레시피 생성 (GPT-3.5)
+1. ✅ 레시피 검색 (RAG + 키워드)
+2. ✅ AI 레시피 생성 (gpt-5-nano)
 3. ✅ 즉시 요리 시작 (0.1초)
 4. ✅ Opening/Closing Remark
 5. ✅ 세션 복구 (새로고침)

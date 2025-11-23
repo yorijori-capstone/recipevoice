@@ -86,13 +86,12 @@ export class NanoService {
       const prompt = this.createGenerationPrompt(userPrompt);
 
       const response = await this.openai.chat.completions.create({
-        model: 'gpt-4o-mini',
+        model: 'gpt-5-nano',
         messages: [
           { role: 'system', content: GENERATION_SYSTEM_PROMPT },
           { role: 'user', content: prompt }
         ],
-        temperature: 0.7,
-        max_tokens: 2048,
+        max_completion_tokens: 2048,
         response_format: { type: 'json_object' }
       });
 
@@ -122,13 +121,12 @@ export class NanoService {
       const prompt = this.createRecommendationPrompt(preferences);
 
       const response = await this.openai.chat.completions.create({
-        model: 'gpt-4o-mini',
+        model: 'gpt-5-nano',
         messages: [
           { role: 'system', content: RECOMMENDATION_SYSTEM_PROMPT },
           { role: 'user', content: prompt }
         ],
-        temperature: 0.8,
-        max_tokens: 1024,
+        max_completion_tokens: 1024,
         response_format: { type: 'json_object' }
       });
 
