@@ -74,6 +74,8 @@ export function DashboardV3() {
 
     setLoading(true);
     setIsSearching(true);
+    setSearchResults([]);  // Clear previous results
+    setHasSearchResults(true);  // Reset to default
 
     try {
       const response = await fetch(
