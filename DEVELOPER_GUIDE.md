@@ -71,7 +71,7 @@ cd frontend2 && npm install && npm run dev
 
 ### 3-1. 프로젝트 클론 및 의존성 설치
 ```bash
-git clone <repository-url>
+git clone https://github.com/yorijori-capstone/recipevoice.git
 cd recipevoice
 
 # Backend
@@ -125,16 +125,16 @@ npm run build:index  # (스크립트가 설정된 경우) 또는 관련 Python �
 
 ### 새로운 기능 개발 시
 1. **최신 코드 받기**: `git pull origin main`
-2. **브랜치 생성**: `git checkout -b feat/new-feature`
+2. **브랜치 생성**: `git checkout -b 개발자초성-기능명`
 3. **개발 서버 실행**: `npm run dev` (Backend), `npm run dev` (Frontend)
 4. **테스트**: 기능 구현 후 로컬 테스트
-5. **커밋 & 푸시**: `git push origin feat/new-feature`
+5. **커밋 & 푸시**: `git push origin 개발자초성-기능명`
 6. **PR 생성**: GitHub에서 Pull Request 생성
 
 ### 코드 스타일
 - **Frontend**: React Functional Components, Hooks, TypeScript
 - **Backend**: Express, TypeScript, Service Layer Pattern
-- **Commits**: Conventional Commits 권장 (e.g., `feat:`, `fix:`, `docs:`)
+- **Commits**: Conventional Commits 권장 (e.g., `[feat]`, `[refactor]`, `[file]`)
 
 ---
 
