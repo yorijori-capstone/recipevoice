@@ -36,19 +36,19 @@ npm run dev
 ## 🏗️ 시스템 아키텍처
 
 ```
-[사용자] → [DashboardV2] → [레시피 검색/선택]
+[User] → [DashboardV3] → [Recipe Search (RAG)]
                 ↓
-         [CookingMode] → [음성 상호작용]
+         [CookingMode] → [Voice Interaction]
                 ↓
-    [WebSocket] → [RealtimeServiceV2]
+        [WebSocket] → [realtime_service]
                 ↓
-         [GPT-4o-realtime] (음성 입출력)
+         [GPT-4o-realtime] (Voice I/O)
                 ↓
-         [LangChainAgent] (Intent Detection)
+         [MCP Tools] (Recipe, Timer, Step Control)
                 ↓
-         [CookingAgentV2] (세션 관리)
+         [PostgreSQL] (Recipes + Planning Data)
                 ↓
-         [PostgreSQL] (레시피 + Planning 데이터)
+         [rag-server] (FAISS Vector Search)
 ```
 
 ## 📊 성능

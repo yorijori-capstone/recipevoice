@@ -91,12 +91,21 @@ export class NanoService {
           { role: 'system', content: GENERATION_SYSTEM_PROMPT },
           { role: 'user', content: prompt }
         ],
-        max_completion_tokens: 2048,
+        max_completion_tokens: 8192,  // Increased for gpt-5-nano reasoning + output
         response_format: { type: 'json_object' }
+      });
+
+      console.log('[NanoService] Response received:', {
+        finish_reason: response.choices[0].finish_reason,
+        has_content: !!response.choices[0].message.content
       });
 
       const content = response.choices[0].message.content;
       if (!content) {
+        console.error('[NanoService] Empty response details:', {
+          finish_reason: response.choices[0].finish_reason,
+          response: JSON.stringify(response, null, 2)
+        });
         throw new Error('Empty response from OpenAI');
       }
 
@@ -126,7 +135,7 @@ export class NanoService {
           { role: 'system', content: RECOMMENDATION_SYSTEM_PROMPT },
           { role: 'user', content: prompt }
         ],
-        max_completion_tokens: 1024,
+        max_completion_tokens: 4096,  // Increased for gpt-5-nano reasoning + output
         response_format: { type: 'json_object' }
       });
 
