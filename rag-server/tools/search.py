@@ -27,10 +27,10 @@ MODEL_NAME = CFG["embedding"]["model"]
 TOP_K = CFG["faiss"]["top_k"]
 
 # Load resources
-print("[RAG] Loading FAISS index and model...")
+print("[RAG] Loading FAISS index and model...", file=sys.stderr)
 INDEX = faiss.read_index(str(INDEX_PATH))
 EMBEDDER = LocalEmbedder(MODEL_NAME)
-print(f"✅ [RAG] Loaded successfully (index size: {INDEX.ntotal})")
+print(f"✅ [RAG] Loaded successfully (index size: {INDEX.ntotal})", file=sys.stderr)
 
 # Load metadata
 METADATA_PATH = INDEX_PATH.parent / "metadata.json"
@@ -52,7 +52,7 @@ def search_recipes(query: str, top_k: int = None) -> List[str]:
     if top_k is None:
         top_k = TOP_K
     
-    print(f"[RAG] Searching for: '{query}' (top_k={top_k})")
+    print(f"[RAG] Searching for: '{query}' (top_k={top_k})", file=sys.stderr)
     
     # 1. Encode query
     query_vector = EMBEDDER.encode([query])
@@ -67,9 +67,9 @@ def search_recipes(query: str, top_k: int = None) -> List[str]:
         if idx < len(METADATA):
             recipe_id = METADATA[idx]['recipe_id']
             recipe_ids.append(recipe_id)
-            print(f"   - {METADATA[idx]['title']} (score: {distance:.3f})")
+            print(f"   - {METADATA[idx]['title']} (score: {distance:.3f})", file=sys.stderr)
     
-    print(f"[RAG] Found {len(recipe_ids)} recipes")
+    print(f"[RAG] Found {len(recipe_ids)} recipes", file=sys.stderr)
     return recipe_ids
 
 

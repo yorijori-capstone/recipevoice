@@ -192,9 +192,8 @@ export const TimerDisplay = forwardRef<TimerDisplayRef, TimerDisplayProps>(({
         {/* Progress Bar */}
         <div className="progress mb-3" style={{ height: '20px' }}>
           <div
-            className={`progress-bar progress-bar-striped ${
-              isRunning && !isPaused ? 'progress-bar-animated' : ''
-            } ${getProgressColor()}`}
+            className={`progress-bar progress-bar-striped ${isRunning && !isPaused ? 'progress-bar-animated' : ''
+              } ${getProgressColor()}`}
             role="progressbar"
             style={{ width: `${getProgressPercentage()}%` }}
             aria-valuenow={getProgressPercentage()}
@@ -206,10 +205,10 @@ export const TimerDisplay = forwardRef<TimerDisplayRef, TimerDisplayProps>(({
         </div>
 
         {/* Controls */}
-        <div className="d-grid gap-2">
+        <div className="d-flex gap-2">
           {!isRunning ? (
             <button
-              className="btn btn-primary"
+              className="btn btn-primary flex-grow-1"
               onClick={() => setIsRunning(true)}
               disabled={remainingTime === 0}
             >
@@ -218,16 +217,25 @@ export const TimerDisplay = forwardRef<TimerDisplayRef, TimerDisplayProps>(({
             </button>
           ) : (
             <button
-              className="btn btn-warning"
-              onClick={() => setIsRunning(false)}
+              className="btn btn-primary flex-grow-1"
+              disabled
             >
-              <i className="bi bi-pause-fill me-2"></i>
-              일시정지
+              <i className="bi bi-play-fill me-2"></i>
+              동작 중
             </button>
           )}
 
           <button
-            className="btn btn-outline-secondary"
+            className="btn btn-warning flex-grow-1"
+            onClick={() => setIsRunning(false)}
+            disabled={!isRunning}
+          >
+            <i className="bi bi-pause-fill me-2"></i>
+            중지
+          </button>
+
+          <button
+            className="btn btn-outline-secondary flex-grow-1"
             onClick={() => {
               setRemainingTime(estimatedTimeSec);
               setIsRunning(false);

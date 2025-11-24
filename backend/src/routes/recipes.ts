@@ -17,10 +17,10 @@ router.get('/', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit as string) || 20;
     const offset = parseInt(req.query.offset as string) || 0;
-    
+
     const recipes = await recipeService.listRecipes(limit, offset);
     const total = await recipeService.countRecipes();
-    
+
     res.json({
       recipes,
       total,
@@ -37,27 +37,26 @@ router.get('/', async (req, res) => {
 router.get('/:recipeId/cleaned', async (req, res) => {
   try {
     const { recipeId } = req.params;
-    
+
     console.log(`[Recipe API] Getting cleaned recipe: ${recipeId}`);
-    
+
     const cleanedRecipe = await recipeCleaner.getCleanedRecipe(recipeId);
-    
     if (!cleanedRecipe) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         error: 'Cleaned recipe not found',
         message: `Recipe ${recipeId} has not been cleaned yet. Run cleaning first.`
       });
     }
-    
+
     res.json({
       success: true,
       recipe: cleanedRecipe
     });
   } catch (error: any) {
     console.error('[Recipe API] Error fetching cleaned recipe:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to fetch cleaned recipe',
-      message: error.message 
+      message: error.message
     });
   }
 });
@@ -124,11 +123,10 @@ router.get('/:recipeId', async (req, res) => {
     
     // cleaned recipe가 없으면 기존 raw recipe 사용 (fallback)
     const recipe = await recipeService.getRecipeById(recipeId);
-    
     if (!recipe) {
       return res.status(404).json({ error: 'Recipe not found' });
     }
-    
+
     res.json(recipe);
   } catch (error) {
     console.error('Error fetching recipe:', error);
@@ -223,7 +221,7 @@ router.get('/search/rag', async (req, res) => {
     const path = await import('path');
     const { fileURLToPath } = await import('url');
     const fs = await import('fs');
-    
+
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = path.dirname(__filename);
     const ragServerDir = path.join(__dirname, '../../../rag-server');
@@ -253,8 +251,8 @@ except Exception as e:
     fs.writeFileSync(tempScriptPath, pythonScript, 'utf-8');
 
     try {
-      const pythonProcess = spawn('python', [tempScriptPath], {
-        cwd: ragServerDir,
+      const pythonProcess = spawn('poetry', ['run', 'python3', tempScriptPath], {
+        cwd: path.join(__dirname, '../../../'),  // Poetry project root
         stdio: ['pipe', 'pipe', 'pipe']
       });
 
@@ -279,13 +277,6 @@ except Exception as e:
         });
       });
 
-      // Clean up temp file
-      try {
-        fs.unlinkSync(tempScriptPath);
-      } catch (e) {
-        // Ignore cleanup errors
-      }
-
       const searchResults = JSON.parse(output.trim());
 
       if (searchResults.error) {
@@ -307,6 +298,9 @@ except Exception as e:
       const recipeIds = searchResults.map((r: any) => r.recipe_id);
       const placeholders = recipeIds.map((_: any, i: number) => `$${i + 1}`).join(', ');
 
+      // Create array literal for ORDER BY (not parameterized)
+      const arrayLiteral = recipeIds.map(id => `'${id.replace(/'/g, "''")}'`).join(', ');
+
       const recipesResult = await pool.query(
         `SELECT cr.id, cr.recipe_id, cr.title, cr.opening_remark,
                 r.difficulty, r.cook_time, r.servings,
@@ -314,8 +308,8 @@ except Exception as e:
          FROM cleaned_recipes cr
          LEFT JOIN recipes r ON cr.recipe_id = r.recipe_id
          WHERE cr.recipe_id IN (${placeholders})
-         ORDER BY array_position(ARRAY[${placeholders}]::text[], cr.recipe_id)`,
-        [...recipeIds, ...recipeIds]
+         ORDER BY array_position(ARRAY[${arrayLiteral}]::text[], cr.recipe_id)`,
+        recipeIds
       );
 
       // Merge with search scores

@@ -231,6 +231,11 @@ export const VoiceInteraction = forwardRef<VoiceInteractionRef, VoiceInteraction
             overflowY: 'auto',
             backgroundColor: '#f8f9fa',
           }}
+          ref={(el) => {
+            if (el) {
+              el.scrollTop = el.scrollHeight;
+            }
+          }}
         >
           {transcripts.length === 0 ? (
             <div className="text-center py-5">
@@ -253,16 +258,14 @@ export const VoiceInteraction = forwardRef<VoiceInteractionRef, VoiceInteraction
               {transcripts.map((transcript, index) => (
                 <div
                   key={index}
-                  className={`d-flex ${
-                    transcript.role === 'user' ? 'justify-content-end' : 'justify-content-start'
-                  }`}
+                  className={`d-flex ${transcript.role === 'user' ? 'justify-content-end' : 'justify-content-start'
+                    }`}
                 >
                   <div
-                    className={`p-3 rounded shadow-sm ${
-                      transcript.role === 'user'
+                    className={`p-3 rounded shadow-sm ${transcript.role === 'user'
                         ? 'bg-primary text-white'
                         : 'bg-white border'
-                    }`}
+                      }`}
                     style={{
                       maxWidth: '80%',
                       wordWrap: 'break-word'

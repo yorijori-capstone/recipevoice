@@ -1,47 +1,150 @@
-/* 기존 CSS 아래에 추가 */
+/* ============================================
+   요리조리 - Global Styles
+   ============================================ */
 
-/* 대화 내역 스크롤바 커스텀 */
+/* Import Design System */
+@import './design-system.css';
+
+/* ============================================
+   Reset & Base Styles
+   ============================================ */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-family-base);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--color-background);
+  color: var(--color-text-primary);
+}
+
+/* ============================================
+   Custom Scrollbar
+   ============================================ */
+
+/* Global scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-border-light);
+  border-radius: var(--radius-sm);
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--color-primary), var(--color-primary-dark));
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-base);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, var(--color-primary-dark), var(--color-primary));
+}
+
+/* Card body scrollbar */
 .card-body::-webkit-scrollbar {
   width: 8px;
 }
 
 .card-body::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 4px;
+  background: var(--color-border-light);
+  border-radius: var(--radius-sm);
 }
 
 .card-body::-webkit-scrollbar-thumb {
-  background: #888;
-  border-radius: 4px;
+  background: var(--color-primary);
+  border-radius: var(--radius-sm);
 }
 
 .card-body::-webkit-scrollbar-thumb:hover {
-  background: #555;
+  background: var(--color-primary-dark);
 }
 
-/* 메시지 애니메이션 */
+/* ============================================
+   Enhanced Animations
+   ============================================ */
+
+/* Message slide in animation */
 @keyframes slideIn {
   from {
     opacity: 0;
     transform: translateY(10px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
   }
 }
 
-.card-body > div > div {
+.card-body>div>div {
   animation: slideIn 0.3s ease-out;
 }
 
-/* 스피너 애니메이션 */
+/* Spinner animation */
 @keyframes spin {
   to {
     transform: rotate(360deg);
   }
 }
 
+.spinner-border,
 .spinner-grow {
   animation: spin 0.75s linear infinite;
+}
+
+/* Loading pulse */
+.loading-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* ============================================
+   Page Transitions
+   ============================================ */
+
+.page-enter {
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+.page-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity var(--transition-base), transform var(--transition-base);
+}
+
+/* ============================================
+   Utility Overrides
+   ============================================ */
+
+.container {
+  max-width: 1200px;
+}
+
+/* Focus styles */
+a:focus,
+button:focus,
+input:focus,
+textarea:focus,
+select:focus {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Selection */
+::selection {
+  background-color: var(--color-primary);
+  color: white;
 }
