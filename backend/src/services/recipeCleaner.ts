@@ -1,5 +1,5 @@
 /**
- * Cleaned Recipe Service
+ * Recipe Cleaner
  * Manages cleaned recipes with pre-processed planning results
  */
 
@@ -270,17 +270,17 @@ You must strictly follow this JSON structure:
 Output Format: Respond ONLY with valid JSON. No other explanations needed.`;
 
 // ============================================================================
-// CleanedRecipeService Class
+// RecipeCleaner Class
 // ============================================================================
 
-export class CleanedRecipeService {
+export class RecipeCleaner {
   private openai: OpenAI;
 
   constructor(apiKey: string) {
     // OpenAI client
     this.openai = new OpenAI({ apiKey });
 
-    console.log('[CleanedRecipeService] Initialized');
+    console.log('[RecipeCleaner] Initialized');
   }
 
   // ==========================================================================
@@ -292,7 +292,7 @@ export class CleanedRecipeService {
    */
   async getCleanedRecipe(recipeId: string): Promise<CleanedRecipe | null> {
     try {
-      console.log(`[CleanedRecipeService] Getting cleaned recipe: ${recipeId}`);
+      console.log(`[RecipeCleaner] Getting cleaned recipe: ${recipeId}`);
 
       const recipeResult = await pool.query(
         'SELECT * FROM cleaned_recipes WHERE recipe_id = $1',
@@ -300,7 +300,7 @@ export class CleanedRecipeService {
       );
 
       if (recipeResult.rows.length === 0) {
-        console.log(`[CleanedRecipeService] Cleaned recipe not found: ${recipeId}`);
+        console.log(`[RecipeCleaner] Cleaned recipe not found: ${recipeId}`);
         return null;
       }
 
@@ -332,15 +332,15 @@ export class CleanedRecipeService {
         timer_message: row.timer_message
       }));
 
-      // 🆕 Get ingredients from raw recipe
-      const ingredientsResult = await pool.query(
-        'SELECT name, quantity FROM ingredients WHERE recipe_id = $1 ORDER BY display_order ASC',
-        [recipeId]
-      );
-
-      const ingredients: Ingredient[] = ingredientsResult.rows.map((row: any) => ({
-        name: row.name,
-        quantity: row.quantity || ''
+      // 🆕 Get ingredients from planning_result (no need to query raw DB)
+      const allIngredients = [
+        ...(planning_result.ingredients.main || []),
+        ...(planning_result.ingredients.sub || [])
+      ];
+      
+      const ingredients: Ingredient[] = allIngredients.map((ing) => ({
+        name: ing.name,
+        quantity: `${ing.amount}${ing.unit}`.trim()
       }));
 
       return {
@@ -356,7 +356,7 @@ export class CleanedRecipeService {
         ingredients  // 🆕 재료 목록 포함
       };
     } catch (error) {
-      console.error('[CleanedRecipeService] Failed to get cleaned recipe:', error);
+      console.error('[RecipeCleaner] Failed to get cleaned recipe:', error);
       throw error;
     }
   }
@@ -373,7 +373,7 @@ export class CleanedRecipeService {
 
       return result.rows.length > 0;
     } catch (error) {
-      console.error('[CleanedRecipeService] Failed to check cleaned status:', error);
+      console.error('[RecipeCleaner] Failed to check cleaned status:', error);
       throw error;
     }
   }
@@ -383,12 +383,12 @@ export class CleanedRecipeService {
    */
   async cleanAndPlanRecipe(recipeId: string): Promise<CleanedRecipe> {
     try {
-      console.log(`[CleanedRecipeService] Starting cleaning for recipe: ${recipeId}`);
+      console.log(`[RecipeCleaner] Starting cleaning for recipe: ${recipeId}`);
 
       // Check if already cleaned
       const alreadyCleaned = await this.isRecipeCleaned(recipeId);
       if (alreadyCleaned) {
-        console.log(`[CleanedRecipeService] Recipe already cleaned: ${recipeId}`);
+        console.log(`[RecipeCleaner] Recipe already cleaned: ${recipeId}`);
         const existing = await this.getCleanedRecipe(recipeId);
         if (existing) return existing;
       }
@@ -402,10 +402,10 @@ export class CleanedRecipeService {
       // Step 3: Save to cleaned_recipes + cleaned_steps
       const cleanedRecipe = await this.saveCleanedRecipe(recipeId, planningResult);
 
-      console.log(`[CleanedRecipeService] Successfully cleaned recipe: ${recipeId}`);
+      console.log(`[RecipeCleaner] Successfully cleaned recipe: ${recipeId}`);
       return cleanedRecipe;
     } catch (error) {
-      console.error(`[CleanedRecipeService] Failed to clean recipe ${recipeId}:`, error);
+      console.error(`[RecipeCleaner] Failed to clean recipe ${recipeId}:`, error);
       throw error;
     }
   }
@@ -415,13 +415,13 @@ export class CleanedRecipeService {
    */
   async deleteCleanedRecipe(recipeId: string): Promise<void> {
     try {
-      console.log(`[CleanedRecipeService] Deleting cleaned recipe: ${recipeId}`);
+      console.log(`[RecipeCleaner] Deleting cleaned recipe: ${recipeId}`);
 
       await pool.query('DELETE FROM cleaned_recipes WHERE recipe_id = $1', [recipeId]);
 
-      console.log(`[CleanedRecipeService] Deleted cleaned recipe: ${recipeId}`);
+      console.log(`[RecipeCleaner] Deleted cleaned recipe: ${recipeId}`);
     } catch (error) {
-      console.error('[CleanedRecipeService] Failed to delete cleaned recipe:', error);
+      console.error('[RecipeCleaner] Failed to delete cleaned recipe:', error);
       throw error;
     }
   }
@@ -466,7 +466,7 @@ export class CleanedRecipeService {
         author: recipe.copyright || ''
       };
     } catch (error) {
-      console.error('[CleanedRecipeService] Failed to fetch raw recipe:', error);
+      console.error('[RecipeCleaner] Failed to fetch raw recipe:', error);
       throw error;
     }
   }
@@ -480,11 +480,11 @@ export class CleanedRecipeService {
 
     try {
       if (retryCount > 0) {
-        console.log(`[CleanedRecipeService] Retrying API call (attempt ${retryCount + 1}/${MAX_RETRIES})...`);
+        console.log(`[RecipeCleaner] Retrying API call (attempt ${retryCount + 1}/${MAX_RETRIES})...`);
         // 재시도 전 잠시 대기
         await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
       } else {
-      console.log('[CleanedRecipeService] Calling OpenAI Planning API...');
+      console.log('[RecipeCleaner] Calling OpenAI Planning API...');
       }
 
       const userPrompt = this.createPlanningPrompt(recipe);
@@ -500,7 +500,7 @@ export class CleanedRecipeService {
       });
 
       // 디버깅: 응답 구조 확인 (간소화 - 중복 제거)
-      console.log('[CleanedRecipeService] Response received:', {
+      console.log('[RecipeCleaner] Response received:', {
         choicesCount: response.choices?.length || 0,
         finishReason: response.choices?.[0]?.finish_reason,
         contentLength: response.choices?.[0]?.message?.content?.length || 0
@@ -512,17 +512,17 @@ export class CleanedRecipeService {
       // finish_reason이 'length'이고 content가 비어있으면 재시도
       if (finishReason === 'length' && (!content || content.length === 0)) {
         if (retryCount < MAX_RETRIES) {
-          console.warn(`[CleanedRecipeService] Response truncated (length), retrying... (${retryCount + 1}/${MAX_RETRIES})`);
+          console.warn(`[RecipeCleaner] Response truncated (length), retrying... (${retryCount + 1}/${MAX_RETRIES})`);
           return this.callPlanningAPI(recipe, retryCount + 1);
         } else {
-          console.error('[CleanedRecipeService] Max retries reached for length error');
+          console.error('[RecipeCleaner] Max retries reached for length error');
           throw new Error(`Empty response from OpenAI after ${MAX_RETRIES} retries. Finish reason: length`);
         }
       }
 
       if (!content) {
         // 더 자세한 오류 정보
-        console.error('[CleanedRecipeService] Empty response details:', {
+        console.error('[RecipeCleaner] Empty response details:', {
           response: JSON.stringify(response, null, 2),
           choices: response.choices,
           finishReason: response.choices[0]?.finish_reason
@@ -534,18 +534,18 @@ export class CleanedRecipeService {
       this.validatePlanData(planData);
 
       if (retryCount > 0) {
-        console.log(`[CleanedRecipeService] Planning API call successful after ${retryCount} retries`);
+        console.log(`[RecipeCleaner] Planning API call successful after ${retryCount} retries`);
       } else {
-      console.log('[CleanedRecipeService] Planning API call successful');
+      console.log('[RecipeCleaner] Planning API call successful');
       }
       return planData as PlanningOutput;
     } catch (error) {
       // length 오류가 아니거나 재시도 횟수를 초과한 경우에만 에러 throw
       if (error instanceof Error && error.message.includes('length') && retryCount < MAX_RETRIES) {
-        console.warn(`[CleanedRecipeService] Length error caught, retrying... (${retryCount + 1}/${MAX_RETRIES})`);
+        console.warn(`[RecipeCleaner] Length error caught, retrying... (${retryCount + 1}/${MAX_RETRIES})`);
         return this.callPlanningAPI(recipe, retryCount + 1);
       }
-      console.error('[CleanedRecipeService] Planning API call failed:', error);
+      console.error('[RecipeCleaner] Planning API call failed:', error);
       throw error;
     }
   }
@@ -560,7 +560,7 @@ export class CleanedRecipeService {
     const originalAuthor = recipe.copyright || recipe.author || '';
     
     // 디버깅: 입력 데이터 확인
-    console.log('[CleanedRecipeService] Input recipe data:', {
+    console.log('[RecipeCleaner] Input recipe data:', {
       title: originalTitle,
       author: originalAuthor,
       rawDataKeys: recipe.raw_data ? Object.keys(recipe.raw_data) : [],
@@ -656,10 +656,10 @@ Output the JSON following the exact schema structure and formatting rules provid
       const mainIngredients = data.ingredients?.main?.slice(0, 2).map((ing: any) => ing.name).filter(Boolean).join(', ') || '';
       if (mainIngredients) {
         meta.title = `${mainIngredients} 요리`;
-        console.warn(`[CleanedRecipeService] Title was empty/generic, inferred from ingredients: "${meta.title}"`);
+        console.warn(`[RecipeCleaner] Title was empty/generic, inferred from ingredients: "${meta.title}"`);
       } else {
         meta.title = '레시피';
-        console.warn(`[CleanedRecipeService] Title was empty and couldn't infer, using default: "${meta.title}"`);
+        console.warn(`[RecipeCleaner] Title was empty and couldn't infer, using default: "${meta.title}"`);
       }
     }
 
@@ -670,10 +670,10 @@ Output the JSON following the exact schema structure and formatting rules provid
       const cookingMethods = data.process?.slice(0, 3).map((step: any) => step.action_type).filter(Boolean).join(', ') || '';
       if (mainIngredients) {
         meta.description = `${mainIngredients}을(를) 사용한 요리입니다.`;
-        console.warn(`[CleanedRecipeService] Description was empty/generic, inferred from ingredients: "${meta.description}"`);
+        console.warn(`[RecipeCleaner] Description was empty/generic, inferred from ingredients: "${meta.description}"`);
       } else {
         meta.description = '맛있는 요리입니다.';
-        console.warn(`[CleanedRecipeService] Description was empty and couldn't infer, using default`);
+        console.warn(`[RecipeCleaner] Description was empty and couldn't infer, using default`);
       }
     }
 
@@ -684,11 +684,11 @@ Output the JSON following the exact schema structure and formatting rules provid
         meta.servings = parsed;
       } else {
         meta.servings = 2;
-        console.warn(`[CleanedRecipeService] Invalid servings "${meta.servings}", defaulting to 2`);
+        console.warn(`[RecipeCleaner] Invalid servings "${meta.servings}", defaulting to 2`);
       }
     } else if (typeof meta.servings !== 'number' || meta.servings <= 0) {
       meta.servings = 2;
-      console.warn(`[CleanedRecipeService] Invalid servings, defaulting to 2`);
+      console.warn(`[RecipeCleaner] Invalid servings, defaulting to 2`);
     }
 
     // ROBUST: Time estimate - default to 30 minutes if invalid
@@ -698,11 +698,11 @@ Output the JSON following the exact schema structure and formatting rules provid
         meta.time_estimate = parsed;
       } else {
         meta.time_estimate = 30;
-        console.warn(`[CleanedRecipeService] Invalid time_estimate "${meta.time_estimate}", defaulting to 30 minutes`);
+        console.warn(`[RecipeCleaner] Invalid time_estimate "${meta.time_estimate}", defaulting to 30 minutes`);
       }
     } else if (typeof meta.time_estimate !== 'number' || meta.time_estimate <= 0) {
       meta.time_estimate = 30;
-      console.warn(`[CleanedRecipeService] Invalid time_estimate, defaulting to 30 minutes`);
+      console.warn(`[RecipeCleaner] Invalid time_estimate, defaulting to 30 minutes`);
     }
 
     // ROBUST: Difficulty - default to 'Medium' if invalid
@@ -716,21 +716,21 @@ Output the JSON following the exact schema structure and formatting rules provid
         meta.difficulty = 'Hard';
       } else {
         meta.difficulty = 'Medium';
-        console.warn(`[CleanedRecipeService] Unknown difficulty "${meta.difficulty}", defaulting to "Medium"`);
+        console.warn(`[RecipeCleaner] Unknown difficulty "${meta.difficulty}", defaulting to "Medium"`);
       }
     } else {
       meta.difficulty = 'Medium';
-      console.warn(`[CleanedRecipeService] Missing difficulty, defaulting to "Medium"`);
+      console.warn(`[RecipeCleaner] Missing difficulty, defaulting to "Medium"`);
     }
 
     // ROBUST: Ingredients - ensure arrays exist
     if (!data.ingredients) {
       data.ingredients = { main: [], sub: [] };
-      console.warn(`[CleanedRecipeService] Missing ingredients, using empty arrays`);
+      console.warn(`[RecipeCleaner] Missing ingredients, using empty arrays`);
     }
     if (!data.ingredients.main || !Array.isArray(data.ingredients.main)) {
       data.ingredients.main = [];
-      console.warn(`[CleanedRecipeService] Missing main ingredients, using empty array`);
+      console.warn(`[RecipeCleaner] Missing main ingredients, using empty array`);
     }
     if (!data.ingredients.sub || !Array.isArray(data.ingredients.sub)) {
       data.ingredients.sub = [];
@@ -775,7 +775,7 @@ Output the JSON following the exact schema structure and formatting rules provid
     // ROBUST: Tools - ensure array exists
     if (!data.tools || !Array.isArray(data.tools)) {
       data.tools = [];
-      console.warn(`[CleanedRecipeService] Missing tools, using empty array`);
+      console.warn(`[RecipeCleaner] Missing tools, using empty array`);
     }
     // Ensure all items are strings
     data.tools = data.tools.map((tool: any) => {
@@ -786,7 +786,7 @@ Output the JSON following the exact schema structure and formatting rules provid
     // ROBUST: Process - ensure array exists and has at least one step
     if (!Array.isArray(data.process)) {
       data.process = [];
-      console.warn(`[CleanedRecipeService] Missing process, using empty array`);
+      console.warn(`[RecipeCleaner] Missing process, using empty array`);
     }
 
     if (data.process.length === 0) {
@@ -802,7 +802,7 @@ Output the JSON following the exact schema structure and formatting rules provid
         timer_seconds: null,
         tip: ''
       }];
-      console.warn(`[CleanedRecipeService] Empty process array, adding default step`);
+      console.warn(`[RecipeCleaner] Empty process array, adding default step`);
     }
 
     // Validate step_index sequence (must be 1, 2, 3, ...)
@@ -942,19 +942,19 @@ Output the JSON following the exact schema structure and formatting rules provid
       // ROBUST: Ensure all required fields exist with defaults
       if (!('phase' in step)) {
         step.phase = 'cooking';
-        console.warn(`[CleanedRecipeService] Missing phase in step ${i + 1}, defaulting to "cooking"`);
+        console.warn(`[RecipeCleaner] Missing phase in step ${i + 1}, defaulting to "cooking"`);
       }
       if (!('step_index' in step)) {
         step.step_index = i + 1;
-        console.warn(`[CleanedRecipeService] Missing step_index in step ${i + 1}, defaulting to ${i + 1}`);
+        console.warn(`[RecipeCleaner] Missing step_index in step ${i + 1}, defaulting to ${i + 1}`);
       }
       if (!('action_type' in step)) {
         step.action_type = 'mix';
-        console.warn(`[CleanedRecipeService] Missing action_type in step ${i + 1}, defaulting to "mix"`);
+        console.warn(`[RecipeCleaner] Missing action_type in step ${i + 1}, defaulting to "mix"`);
       }
       if (!('description' in step) || !step.description || typeof step.description !== 'string' || !step.description.trim()) {
         step.description = '다음 단계를 진행해주세요.';
-        console.warn(`[CleanedRecipeService] Missing or empty description in step ${i + 1}, using default`);
+        console.warn(`[RecipeCleaner] Missing or empty description in step ${i + 1}, using default`);
       }
       if (!('ingredients_needed' in step)) {
         step.ingredients_needed = [];
@@ -993,22 +993,22 @@ Output the JSON following the exact schema structure and formatting rules provid
             } else {
               step.phase = 'cooking'; // Default
             }
-            console.warn(`[CleanedRecipeService] Phase "${step.phase}" was action_type "${lower}" in step ${i + 1}, inferred phase from action`);
+            console.warn(`[RecipeCleaner] Phase "${step.phase}" was action_type "${lower}" in step ${i + 1}, inferred phase from action`);
           } else {
             // ROBUST: Default to 'cooking' for unknown values
             step.phase = 'cooking';
-            console.warn(`[CleanedRecipeService] Unknown phase "${step.phase}" in step ${i + 1}, defaulting to "cooking"`);
+            console.warn(`[RecipeCleaner] Unknown phase "${step.phase}" in step ${i + 1}, defaulting to "cooking"`);
           }
         }
       } else {
         step.phase = 'cooking';
-        console.warn(`[CleanedRecipeService] Invalid phase type in step ${i + 1}, defaulting to "cooking"`);
+        console.warn(`[RecipeCleaner] Invalid phase type in step ${i + 1}, defaulting to "cooking"`);
       }
       
       // Final check (should always pass now)
       if (!validPhases.includes(step.phase)) {
         step.phase = 'cooking';
-        console.warn(`[CleanedRecipeService] Phase validation failed in step ${i + 1}, forced to "cooking"`);
+        console.warn(`[RecipeCleaner] Phase validation failed in step ${i + 1}, forced to "cooking"`);
       }
 
       // ROBUST: Validate step_index - auto-correct if invalid
@@ -1018,11 +1018,11 @@ Output the JSON following the exact schema structure and formatting rules provid
           step.step_index = parsed;
         } else {
           step.step_index = i + 1;
-          console.warn(`[CleanedRecipeService] Invalid step_index "${step.step_index}" in step ${i + 1}, defaulting to ${i + 1}`);
+          console.warn(`[RecipeCleaner] Invalid step_index "${step.step_index}" in step ${i + 1}, defaulting to ${i + 1}`);
         }
       } else if (typeof step.step_index !== 'number' || step.step_index < 1) {
         step.step_index = i + 1;
-        console.warn(`[CleanedRecipeService] Invalid step_index in step ${i + 1}, defaulting to ${i + 1}`);
+        console.warn(`[RecipeCleaner] Invalid step_index in step ${i + 1}, defaulting to ${i + 1}`);
       }
 
       // Validate action_type (should be correct from LLM, but map common variations)
@@ -1034,24 +1034,24 @@ Output the JSON following the exact schema structure and formatting rules provid
         } else if (actionTypeMapping[lower]) {
           const originalValue = step.action_type;
           step.action_type = actionTypeMapping[lower];
-          console.warn(`[CleanedRecipeService] Mapped action_type "${originalValue}" → "${step.action_type}" in step ${i + 1}`);
+          console.warn(`[RecipeCleaner] Mapped action_type "${originalValue}" → "${step.action_type}" in step ${i + 1}`);
         } else {
           // ROBUST FALLBACK: Unknown action_type → default to 'mix'
           const originalValue = step.action_type;
           step.action_type = 'mix';
-          console.warn(`[CleanedRecipeService] Unknown action_type "${originalValue}" in step ${i + 1}, defaulting to "mix"`);
+          console.warn(`[RecipeCleaner] Unknown action_type "${originalValue}" in step ${i + 1}, defaulting to "mix"`);
         }
       } else if (!step.action_type) {
         // Missing action_type → default to 'mix'
         step.action_type = 'mix';
-        console.warn(`[CleanedRecipeService] Missing action_type in step ${i + 1}, defaulting to "mix"`);
+        console.warn(`[RecipeCleaner] Missing action_type in step ${i + 1}, defaulting to "mix"`);
       }
       
       // Final validation (should always pass now due to fallback)
       if (!validActionTypes.includes(step.action_type)) {
         // This should never happen due to fallback, but keep as safety check
         step.action_type = 'mix';
-        console.warn(`[CleanedRecipeService] Invalid action_type in step ${i + 1}, forced to "mix"`);
+        console.warn(`[RecipeCleaner] Invalid action_type in step ${i + 1}, forced to "mix"`);
       }
 
       if (typeof step.description !== 'string' || !step.description.trim()) {
@@ -1135,8 +1135,9 @@ Output the JSON following the exact schema structure and formatting rules provid
 
   /**
    * Save cleaned recipe to database (Phase 2 - new schema)
+   * Public method for saving PlanningOutput directly (e.g., from RecipeCreator)
    */
-  private async saveCleanedRecipe(
+  async saveCleanedRecipe(
     recipeId: string,
     planningResult: PlanningOutput
   ): Promise<CleanedRecipe> {
@@ -1220,7 +1221,7 @@ Output the JSON following the exact schema structure and formatting rules provid
 
       await client.query('COMMIT');
 
-      console.log(`[CleanedRecipeService] Saved cleaned recipe to database: ${recipeId}`);
+      console.log(`[RecipeCleaner] Saved cleaned recipe to database: ${recipeId}`);
 
       // Get ingredients for the return value
       const ingredientsResult = await pool.query(
@@ -1261,7 +1262,7 @@ Output the JSON following the exact schema structure and formatting rules provid
       };
     } catch (error) {
       await client.query('ROLLBACK');
-      console.error('[CleanedRecipeService] Failed to save cleaned recipe:', error);
+      console.error('[RecipeCleaner] Failed to save cleaned recipe:', error);
       throw error;
     } finally {
       client.release();

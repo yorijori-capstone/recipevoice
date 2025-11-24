@@ -4,7 +4,7 @@
  */
 
 import { EventEmitter } from 'events';
-import { CleanedRecipeService, CleanedRecipe, PlannedStep, ProcessStep, Ingredient, PlanningOutput } from '../services/cleanedRecipeService.js';
+import { RecipeCleaner, CleanedRecipe, PlannedStep, ProcessStep, Ingredient, PlanningOutput } from '../services/recipeCleaner.js';
 import { SessionService, CookingSessionData } from '../services/sessionService.js';
 
 // ============================================================================
@@ -34,13 +34,13 @@ export interface CookingSession {
 // ============================================================================
 
 export class CookingAgentV3 extends EventEmitter {
-  private cleanedRecipeService: CleanedRecipeService;
+  private recipeCleaner: RecipeCleaner;
   private sessionService: SessionService;
   private sessions: Map<string, CookingSession> = new Map();
 
   constructor(apiKey: string) {
     super();
-    this.cleanedRecipeService = new CleanedRecipeService(apiKey);
+    this.recipeCleaner = new RecipeCleaner(apiKey);
     this.sessionService = new SessionService();
 
     console.log('[CookingAgentV3] Initialized');
@@ -58,7 +58,7 @@ export class CookingAgentV3 extends EventEmitter {
       console.log(`[CookingAgentV3] Starting session for recipe: ${recipeId}`);
 
       // Step 1: Load cleaned recipe (Planning already done!)
-      const cleanedRecipe = await this.cleanedRecipeService.getCleanedRecipe(recipeId);
+      const cleanedRecipe = await this.recipeCleaner.getCleanedRecipe(recipeId);
 
       if (!cleanedRecipe) {
         throw new Error(`Cleaned recipe not found: ${recipeId}. Run cleanAndPlanRecipe first.`);
