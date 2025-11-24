@@ -75,7 +75,7 @@ export function useCookingSessionV3(): UseCookingSessionV3Return {
   }, []);
 
   /**
-   * Start a new cooking session using V2 API
+   * Start a new cooking session using V3 API
    */
   const startSession = useCallback(async (recipeId: string) => {
     setLoading(true);

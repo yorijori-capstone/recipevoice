@@ -56,7 +56,7 @@ Backend CleanedRecipeService:
     4. PlanningService 자동 실행 (gpt-5-nano)
     5. cleaned_recipes (planning_result JSONB), cleaned_steps 저장
     ↓
-Frontend: 생성 완료 → DashboardV2에서 즉시 검색 가능
+Frontend: 생성 완료 → DashboardV3에서 즉시 검색 가능
 ```
 
 ## 3. 요리 세션 시작 (0.1초 ⚡)
@@ -70,7 +70,7 @@ CookingMode.tsx 마운트
     ↓
 API: POST /api/cooking/v2/start { recipeId: "6838792" }
     ↓
-Backend CookingAgentV2.startCookingSession():
+Backend CookingAgentV3.startCookingSession():
     1. cleaned_recipes 테이블에서 Planning 결과 로드 (즉시)
     2. cooking_sessions 테이블에 세션 생성
     3. Node.js Map 메모리에 세션 객체 저장
@@ -98,11 +98,11 @@ WebSocket: ws://localhost:3001
     ↓
 Frontend: { type: 'init_session', sessionId }
     ↓
-Backend ServerV2.ts:
-    1. RealtimeServiceV2.setActiveSession(sessionId)
+Backend ServerV3.ts:
+    1. RealtimeServiceV3.setActiveSession(sessionId)
     2. OpenAI Realtime API 연결
     ↓
-RealtimeServiceV2:
+RealtimeServiceV3:
     1. CookingAgent에서 세션 가져오기 (Node.js Map)
     2. System Prompt 생성:
        - 레시피 제목
@@ -145,7 +145,7 @@ RealtimeServiceV3:
     2. OpenAI Realtime API 업데이트
     3. 'tool_executed' 이벤트 emit
     ↓
-Backend ServerV2 → Frontend WebSocket:
+Backend ServerV3 → Frontend WebSocket:
     { type: 'session_state_updated', currentStepIndex: 1 }
     ↓
 Frontend:
@@ -169,9 +169,9 @@ Frontend: 스피커로 음성 출력
     ↓ (Planning 1회 실행)
 [cleaned_recipes + cleaned_steps] ← PostgreSQL 영구 저장
     ↓ (세션 시작 시)
-[CookingAgentV2 Map] ← Node.js RAM (빠른 조회)
+[CookingAgentV3 Map] ← Node.js RAM (빠른 조회)
     ↓ (WebSocket 연결 시)
-[RealtimeServiceV2 System Prompt] ← OpenAI API 전송
+[RealtimeServiceV3 System Prompt] ← OpenAI API 전송
     ↓ (음성 대화)
 [GPT-4o-realtime] ← 스크립트 기반 음성 안내
 ```
@@ -220,10 +220,10 @@ session_states       → 세션 상태 히스토리 (단계 이동 로그)
 ```
 App.tsx
     ↓
-DashboardV2.tsx (레시피 검색/선택)
+DashboardV3.tsx (레시피 검색/선택)
     ↓ 요리 시작 클릭
 CookingMode.tsx (메인 페이지)
-    ├─ useCookingSessionV2 (세션 관리)
+    ├─ useCookingSessionV3 (세션 관리)
     ├─ ProgressBar (진행률 표시)
     ├─ StepDisplay (현재 단계 스크립트)
     ├─ TimerDisplay (타이머)
@@ -237,17 +237,16 @@ CookingMode.tsx (메인 페이지)
 ## 9. Backend 서비스 구조
 
 ```
-ServerV2.ts (Express + WebSocket)
-    ├─ CookingServiceV2 (통합 서비스)
-    │   ├─ CookingAgentV2 (세션 관리)
-    │   ├─ LangChainAgent (Intent Detection)
-    │   └─ RealtimeServiceV2 (OpenAI Realtime API)
+ServerV3.ts (Express + WebSocket)
+    ├─ CookingServiceV3 (통합 서비스)
+    │   ├─ CookingAgentV3 (세션 관리)
+    │   └─ RealtimeServiceV3 (OpenAI Realtime API + MCP)
     │
     ├─ RecipeService (원본 레시피)
-    ├─ CleanedRecipeService (Planning 결과)
-    ├─ NanoService (AI 레시피 생성)
+    ├─ RecipeCleaner (Planning 결과)
+    ├─ RecipeCreator (AI 레시피 생성)
     ├─ SessionService (세션 DB 관리)
-    └─ PlanningService (GPT-4o Planning)
+    └─ PlanningService (GPT-5-nano Planning)
 ```
 
 ## 10. 에러 처리 및 복구
@@ -268,7 +267,7 @@ useWebSocket 자동 재연결
     ↓
 init_session 재전송
     ↓
-RealtimeServiceV2 재초기화
+RealtimeServiceV3 재초기화
 ```
 
 ### AI 레시피 삭제:
@@ -279,5 +278,5 @@ DELETE /api/recipes/:recipeId
     ↓
 5개 테이블 CASCADE 삭제
     ↓
-DashboardV2 목록 새로고침
+DashboardV3 목록 새로고침
 ```

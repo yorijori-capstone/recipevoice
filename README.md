@@ -36,17 +36,17 @@ npm run dev
 ## 🏗️ 시스템 아키텍처
 
 ```
-[사용자] → [DashboardV2] → [레시피 검색/선택]
+[사용자] → [DashboardV3] → [레시피 검색/선택]
                 ↓
          [CookingMode] → [음성 상호작용]
                 ↓
-    [WebSocket] → [RealtimeServiceV2]
+    [WebSocket] → [RealtimeServiceV3]
                 ↓
          [GPT-4o-realtime] (음성 입출력)
                 ↓
-         [LangChainAgent] (Intent Detection)
+         [MCP Tool Calling] (Native Tool Execution)
                 ↓
-         [CookingAgentV2] (세션 관리)
+         [CookingAgentV3] (세션 관리)
                 ↓
          [PostgreSQL] (레시피 + Planning 데이터)
 ```
