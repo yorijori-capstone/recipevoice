@@ -84,7 +84,7 @@ export function useCookingSessionV3(): UseCookingSessionV3Return {
     try {
       console.log('[useCookingSessionV3] Starting session for recipe:', recipeId);
 
-      const response = await fetch(`${API_BASE_URL}/api/cooking/v2/start`, {
+      const response = await fetch(`${API_BASE_URL}/api/cooking/v3/start`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -121,7 +121,7 @@ export function useCookingSessionV3(): UseCookingSessionV3Return {
     try {
       console.log('[useCookingSessionV3] Recovering session:', sessionId);
 
-      const response = await fetch(`${API_BASE_URL}/api/cooking/v2/session/${sessionId}`);
+      const response = await fetch(`${API_BASE_URL}/api/cooking/v3/session/${sessionId}`);
 
       if (!response.ok) {
         if (response.status === 404) {
@@ -156,7 +156,7 @@ export function useCookingSessionV3(): UseCookingSessionV3Return {
     setError(null);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/cooking/v2/session/${sessionId}`);
+      const response = await fetch(`${API_BASE_URL}/api/cooking/v3/session/${sessionId}`);
 
       if (!response.ok) {
         throw new Error('Failed to get session');
@@ -184,7 +184,7 @@ export function useCookingSessionV3(): UseCookingSessionV3Return {
 
     try {
       const response = await fetch(
-        `${API_BASE_URL}/api/cooking/v2/session/${session.sessionId}/next`,
+        `${API_BASE_URL}/api/cooking/v3/session/${session.sessionId}/next`,
         {
           method: 'POST',
         }
@@ -242,7 +242,7 @@ export function useCookingSessionV3(): UseCookingSessionV3Return {
 
     try {
       const response = await fetch(
-        `${API_BASE_URL}/api/cooking/v2/session/${session.sessionId}/previous`,
+        `${API_BASE_URL}/api/cooking/v3/session/${session.sessionId}/previous`,
         {
           method: 'POST',
         }
@@ -342,7 +342,7 @@ export function useCookingSessionV3(): UseCookingSessionV3Return {
 
     try {
       const response = await fetch(
-        `${API_BASE_URL}/api/cooking/v2/session/${session.sessionId}/end`,
+        `${API_BASE_URL}/api/cooking/v3/session/${session.sessionId}/end`,
         {
           method: 'POST',
         }

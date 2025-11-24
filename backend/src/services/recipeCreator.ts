@@ -293,7 +293,7 @@ IMPORTANT: Output JSON only. Provide exactly 3 recommendations.`;
     }
     if (!data.process) {
       throw new Error('Missing required field: process');
-    }
+      }
 
     // Validate meta
     const meta = data.meta;

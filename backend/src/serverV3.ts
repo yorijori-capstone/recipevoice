@@ -24,7 +24,7 @@ app.get('/health', (req, res) => {
 app.use('/api/recipes', recipeRoutes);
 
 // Cooking mode API routes (V3: MCP Tool Calling)
-app.use('/api/cooking/v2', cookingV3Routes);
+app.use('/api/cooking/v3', cookingV3Routes);  // v2 → v3로 변경
 
 const PORT = process.env.PORT || 3001;
 const server = app.listen(PORT, () => {

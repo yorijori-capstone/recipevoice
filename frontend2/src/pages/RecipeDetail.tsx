@@ -304,16 +304,21 @@ export function RecipeDetail() {
       >
         <div className="card-body" style={{ padding: 'var(--spacing-4)' }}>
           <small className="text-muted">
-            출처: {recipe.copyright || '알 수 없음'} |
-            <a
-              href={recipe.source_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="ms-2"
-              style={{ color: 'var(--color-primary)' }}
-            >
-              원본 레시피 보기
-            </a>
+            출처: {recipe.copyright || '알 수 없음'}
+            {recipe.source_url && recipe.source_url !== 'AI Generated' && (
+              <>
+                {' | '}
+                <a
+                  href={recipe.source_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="ms-2"
+                  style={{ color: 'var(--color-primary)' }}
+                >
+                  원본 레시피 보기
+                </a>
+              </>
+            )}
           </small>
         </div>
       </div>

@@ -47,7 +47,7 @@ async function getCookingServiceV3(): Promise<CookingServiceV3> {
 }
 
 /**
- * POST /api/cooking/v2/start
+ * POST /api/cooking/v3/start  // v2 → v3로 주석 업데이트
  * Start a new cooking session with cleaned recipe
  * Body: { recipeId: string }
  */
@@ -98,8 +98,8 @@ router.post('/start', async (req: Request, res: Response) => {
 });
 
 /**
- * GET /api/cooking/v2/session/:sessionId
- * Get session info
+ * GET /api/cooking/v3/session/:sessionId
+ * Get session info (with recovery from DB if not in memory)
  */
 router.get('/session/:sessionId', async (req: Request, res: Response) => {
   try {
@@ -108,12 +108,22 @@ router.get('/session/:sessionId', async (req: Request, res: Response) => {
     const service = await getCookingServiceV3();
     const agent = service.getCookingAgent();
 
-    const session = agent.getSession(sessionId);
+    // 먼저 메모리에서 확인
+    let session = agent.getSession(sessionId);
+    
+    // 메모리에 없으면 DB에서 복구
     if (!session) {
-      return res.status(404).json({
-        error: 'NOT_FOUND',
-        message: 'Session not found',
-      });
+      console.log(`[Cooking V3 API] Session not in memory, recovering from DB: ${sessionId}`);
+      const recoveredSession = await agent.recoverSession(sessionId);
+      
+      if (!recoveredSession) {
+        return res.status(404).json({
+          error: 'NOT_FOUND',
+          message: 'Session not found',
+        });
+      }
+      
+      session = recoveredSession;
     }
 
     const currentStep = agent.getCurrentStep(sessionId);
@@ -123,11 +133,15 @@ router.get('/session/:sessionId', async (req: Request, res: Response) => {
       session: {
         sessionId: session.sessionId,
         recipeId: session.recipeId,
+        cleanedRecipeId: session.cleanedRecipeId,
         title: session.title,
+        openingRemark: session.openingRemark,
+        closingRemark: session.closingRemark,
         totalSteps: session.totalSteps,
         currentStepIndex: session.currentStepIndex,
         viewingStepIndex: session.viewingStepIndex,
         status: session.status,
+        plannedSteps: session.plannedSteps,  // ✅ 추가
         currentStep,
       },
     });
@@ -141,7 +155,7 @@ router.get('/session/:sessionId', async (req: Request, res: Response) => {
 });
 
 /**
- * POST /api/cooking/v2/session/:sessionId/next
+ * POST /api/cooking/v3/session/:sessionId/next
  * Move to next step
  */
 router.post('/session/:sessionId/next', async (req: Request, res: Response) => {
@@ -168,7 +182,7 @@ router.post('/session/:sessionId/next', async (req: Request, res: Response) => {
 });
 
 /**
- * POST /api/cooking/v2/session/:sessionId/previous
+ * POST /api/cooking/v3/session/:sessionId/previous
  * Move to previous step
  */
 router.post('/session/:sessionId/previous', async (req: Request, res: Response) => {
@@ -196,7 +210,7 @@ router.post('/session/:sessionId/previous', async (req: Request, res: Response) 
 // 🆕 Phase 2: /voice-mode endpoint removed - Voice is now simple ON/OFF
 
 /**
- * POST /api/cooking/v2/session/:sessionId/end
+ * POST /api/cooking/v3/session/:sessionId/end
  * End cooking session
  */
 router.post('/session/:sessionId/end', async (req: Request, res: Response) => {
@@ -224,7 +238,7 @@ router.post('/session/:sessionId/end', async (req: Request, res: Response) => {
 });
 
 /**
- * GET /api/cooking/v2/session/:sessionId/history
+ * GET /api/cooking/v3/session/:sessionId/history
  * Get session state history
  */
 router.get('/session/:sessionId/history', async (req: Request, res: Response) => {
@@ -251,7 +265,7 @@ router.get('/session/:sessionId/history', async (req: Request, res: Response) =>
 });
 
 /**
- * GET /api/cooking/v2/health
+ * GET /api/cooking/v3/health
  * Check cooking service health
  */
 router.get('/health', async (req: Request, res: Response) => {

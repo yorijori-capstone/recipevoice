@@ -11,7 +11,7 @@ recipes 테이블에 raw_data (JSONB) 저장
     ↓
 npm run clean:all
     ↓
-CleanedRecipeService: raw_data에서 레시피 정보 추출
+RecipeCleaner: raw_data에서 레시피 정보 추출
     ↓
 PlanningService: gpt-5-nano로 각 레시피 Planning 실행
     - meta (title, description, servings, time, difficulty)
@@ -19,7 +19,7 @@ PlanningService: gpt-5-nano로 각 레시피 Planning 실행
     - tools
     - process (단계별 상세 정보)
     ↓
-CleanedRecipeService: PostgreSQL 저장
+RecipeCleaner: PostgreSQL 저장
     - cleaned_recipes 테이블 (planning_result JSONB)
     - cleaned_steps 테이블 (단계별 스크립트)
 ```
@@ -47,13 +47,13 @@ Frontend: "AI로 새 레시피 생성하기" 버튼 클릭
     ↓
 API: POST /api/recipes/generate { prompt: "스테이크" }
     ↓
-Backend NanoService:
-    1. gpt-5-nano로 레시피 생성
+Backend RecipeCreator:
+    1. gpt-5-nano로 레시피 생성 (PlanningOutput 형식)
     2. recipes 테이블 저장 (recipe_id: recipe_gen_123)
     3. raw_data (JSONB)에 전체 레시피 저장
     ↓
-Backend CleanedRecipeService:
-    4. PlanningService 자동 실행 (gpt-5-nano)
+Backend RecipeCleaner:
+    4. PlanningOutput을 cleaned_recipes에 직접 저장
     5. cleaned_recipes (planning_result JSONB), cleaned_steps 저장
     ↓
 Frontend: 생성 완료 → DashboardV3에서 즉시 검색 가능
@@ -68,7 +68,7 @@ Navigate: /cooking/:recipeId
     ↓
 CookingMode.tsx 마운트
     ↓
-API: POST /api/cooking/v2/start { recipeId: "6838792" }
+API: POST /api/cooking/v3/start { recipeId: "6838792" }
     ↓
 Backend CookingAgentV3.startCookingSession():
     1. cleaned_recipes 테이블에서 Planning 결과 로드 (즉시)
@@ -180,10 +180,10 @@ Frontend: 스피커로 음성 출력
 ```
 1. POST /api/recipes/generate          (AI 레시피 생성)
 2. GET  /api/recipes/search/cleaned    (레시피 검색)
-3. POST /api/cooking/v2/start          (세션 시작)
+3. POST /api/cooking/v3/start          (세션 시작)
 4. WebSocket init_session              (Realtime 연결)
 5. WebSocket audio_chunk               (음성 입력)
-6. POST /api/cooking/v2/session/:id/next  (수동 다음 단계)
+6. POST /api/cooking/v3/session/:id/next  (수동 다음 단계)
 7. DELETE /api/recipes/:recipeId       (AI 레시피 삭제)
 ```
 
@@ -207,7 +207,7 @@ session_states       → 세션 상태 히스토리 (단계 이동 로그)
 
 ### 음성 명령 자동 처리:
 - ❌ if/else 패턴 매칭
-- ✅ LangChain + GPT-3.5 Intent Detection
+- ✅ MCP Tool Calling (Native Tool Execution)
 - 자연어 이해 및 자동 Tool 실행
 
 ### 실시간 UI 동기화:
@@ -257,8 +257,8 @@ localStorage에 sessionId + recipeId 저장
     ↓
 CookingMode 마운트 시 recipeId 비교
     ↓
-같으면: GET /api/cooking/v2/session/:id (복구)
-다르면: POST /api/cooking/v2/start (새 세션)
+같으면: GET /api/cooking/v3/session/:id (복구)
+다르면: POST /api/cooking/v3/start (새 세션)
 ```
 
 ### WebSocket 연결 끊김:
