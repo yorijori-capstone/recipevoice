@@ -1,4 +1,4 @@
-# 🚀 빠른 시작 가이드 (V3)
+g# 🚀 빠른 시작 가이드 (V3)
 
 > **소요 시간**: 5분
 > **전제 조건**: Node.js 18+, PostgreSQL 14+, OpenAI API Key
