@@ -274,7 +274,6 @@ body {
 .btn-primary:hover {
   background: var(--color-primary-dark) !important;
   border-color: var(--color-primary-dark) !important;
-  transform: translateY(-2px);
   box-shadow: var(--shadow-md);
 }
 
@@ -288,7 +287,6 @@ body {
 .btn-success:hover {
   background: var(--color-primary-dark);
   border-color: var(--color-primary-dark);
-  transform: translateY(-2px);
   box-shadow: var(--shadow-md);
 }
 

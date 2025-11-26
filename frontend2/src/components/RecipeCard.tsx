@@ -1,7 +1,9 @@
 import { Link } from 'react-router-dom';
 import { useState } from 'react';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+import { getApiBaseUrl } from '../utils/api';
+
+const API_BASE_URL = getApiBaseUrl();
 
 interface RecipeCardProps {
   id: number;
@@ -72,8 +74,8 @@ export function RecipeCard({ recipe_id, title, cookTime, difficulty, servings, o
             <div
               className="flex-shrink-0 d-flex align-items-center justify-content-center rounded-3 me-3"
               style={{
-                width: '80px',
-                height: '80px',
+                width: '60px',
+                height: '60px',
                 background: 'linear-gradient(135deg, #FFE5D9 0%, #FFF0E6 100%)',
                 fontSize: '2rem',
               }}

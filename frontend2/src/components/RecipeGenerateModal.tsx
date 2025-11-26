@@ -11,7 +11,9 @@ interface RecipeGenerateModalProps {
   initialPrompt?: string;
 }
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+import { getApiBaseUrl } from '../utils/api';
+
+const API_BASE_URL = getApiBaseUrl();
 
 export function RecipeGenerateModal({ onClose, onRecipeGenerated, initialPrompt = '' }: RecipeGenerateModalProps) {
   const [prompt, setPrompt] = useState(initialPrompt);
@@ -92,11 +94,11 @@ export function RecipeGenerateModal({ onClose, onRecipeGenerated, initialPrompt 
         tabIndex={-1}
         style={{ zIndex: 1050 }}
       >
-        <div className="modal-dialog modal-lg modal-dialog-scrollable">
+        <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable" style={{ maxWidth: '500px', width: '95%', margin: '1rem auto' }}>
           <div className="modal-content">
             {/* Header */}
             <div className="modal-header text-white" style={{ background: 'var(--color-primary)' }}>
-              <h5 className="modal-title">✨ AI 레시피 생성</h5>
+              <h5 className="modal-title" style={{ fontSize: '1.1rem' }}>✨ AI 레시피 생성</h5>
               <button
                 type="button"
                 className="btn-close btn-close-white"
@@ -111,20 +113,21 @@ export function RecipeGenerateModal({ onClose, onRecipeGenerated, initialPrompt 
               {!generatedRecipe ? (
                 <>
                   {/* Input Section */}
-                  <div className="mb-4">
-                    <label htmlFor="recipePrompt" className="form-label">
+                  <div className="mb-3">
+                    <label htmlFor="recipePrompt" className="form-label" style={{ fontSize: '0.95rem' }}>
                       어떤 요리를 만들고 싶으세요?
                     </label>
                     <input
                       type="text"
-                      className="form-control form-control-lg"
+                      className="form-control"
                       id="recipePrompt"
-                      placeholder="예: 자취생이 1인분 30분 이내로 간단하게 먹기 좋은 맛있는 파스타 레시피"
+                      placeholder="예: 자취생이 30분 이내로 간단하게 만들 수 있는 파스타 레시피"
                       value={prompt}
                       onChange={(e) => setPrompt(e.target.value)}
                       onKeyPress={handleKeyPress}
                       disabled={loading}
                       autoFocus
+                      style={{ fontSize: '0.9rem' }}
                     />
                   </div>
 
