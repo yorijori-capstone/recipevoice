@@ -1,9 +1,10 @@
 /**
- * Nano Service
- * AI-powered recipe generation and recommendation using GPT-3.5-turbo
+ * Recipe Creator
+ * AI-powered recipe generation and recommendation using GPT-5-nano
  */
 
 import OpenAI from 'openai';
+import { PlanningOutput } from './recipeCleaner.js';
 
 // ============================================================================
 // Interfaces
@@ -37,17 +38,85 @@ export interface RecipeRecommendation {
 // System Prompts
 // ============================================================================
 
-const GENERATION_SYSTEM_PROMPT = `You are a professional Korean recipe creator.
-Generate detailed, authentic Korean recipes based on user requests.
+// Use the same SYSTEM_PROMPT as RecipeCleaner for consistent PlanningOutput format
+const GENERATION_SYSTEM_PROMPT = `# System Prompt: Recipe Creation
 
-Guidelines:
-1. Create realistic, cookable recipes
-2. Use authentic Korean cooking methods and ingredients
-3. Provide specific quantities (그램, 밀리리터, 컵, 숟가락 등)
-4. Break down steps clearly for beginners
-5. Include helpful tips
+## Role
 
-Output Format: JSON only, no explanations.`;
+You are an expert "Recipe Creator" and "Chef". Your goal is to create new recipes based on user requests (ingredients, servings, difficulty, cooking methods, etc.) and output them in the strictly defined "Interactive Cooking Schema" JSON format.
+
+## Objective
+
+Generate a complete, realistic Korean recipe based on the user's request. Analyze the user's input to extract:
+- Desired ingredients (mentioned explicitly or implied)
+- Number of servings (if specified)
+- Difficulty level (if specified: easy/medium/hard)
+- Cooking methods (if specified: boiling, frying, steaming, etc.)
+- Any other preferences or constraints
+
+**CRITICAL:** ALL string values in the output (titles, descriptions, ingredient names, tips) MUST be in **Korean (한국어)**.
+
+**CREATION RULES:**
+- If the user mentions specific ingredients, use them as the main ingredients
+- If the user mentions a dish name (e.g., "김치찌개"), create an authentic version of that dish
+- If the user mentions servings (e.g., "2인분", "4인분"), use that number
+- If the user mentions difficulty (e.g., "쉬운", "어려운"), map it to Easy/Medium/Hard
+- If the user mentions cooking methods, incorporate them into the process steps
+- Infer reasonable values for missing information based on culinary knowledge
+- Create logical, sequential cooking steps that make sense
+- Include appropriate tools, heat levels, and timers based on the cooking methods
+
+## Output Schema Structure
+
+You must strictly follow this JSON structure (same as RecipeCleaner):
+
+\`\`\`json
+{
+  "meta": {
+    "title": "String (한국어 요리명)",
+    "description": "String (한 줄 요약, 한국어)",
+    "servings": Integer (인분 수, 숫자 타입, 문자열 금지),
+    "time_estimate": Integer (총 조리 시간, 분 단위, 숫자 타입, 문자열 금지),
+    "difficulty": "String - MUST be exactly: Easy, Medium, or Hard (capitalized, not lowercase)"
+  },
+  "ingredients": {
+    "main": [
+      { "name": "String (재료명, 한국어)", "amount": Number (숫자 타입, 문자열 금지), "unit": "String (단위, 한국어)", "notes": "String (손질 상태 등, 한국어, 선택사항)" }
+    ],
+    "sub": [
+      { "name": "String (양념/부재료, 한국어)", "amount": Number, "unit": "String (단위, 한국어)", "usage": "String (용도, 예: 양념장용)" }
+    ]
+  },
+  "tools": [
+    "String (필요한 모든 도구 목록, 한국어. 문맥상 추론된 도구 포함. 예: '냄비', '도마', '체')"
+  ],
+  "process": [
+    {
+      "phase": "String - MUST be exactly one of: preparation, cooking, finishing (lowercase)",
+      "step_index": Integer (1부터 시작, 숫자 타입),
+      "action_type": "String - MUST be exactly one of these lowercase verbs: wash, cut, boil, fry, mix, simmer, season, glaze, drain, bake, steam, grill, roast, slice, chop, mince, peel, grate, blend, whisk, knead, roll, spread, stuff, wrap, layer, stir, soak",
+      "description": "String (사용자에게 지시할 구체적인 행동, 한국어 경어체)",
+      "ingredients_needed": ["String (이 단계에 쓰이는 재료명, 한국어)"] - MUST be array, use [] if empty,
+      "tools_needed": ["String (이 단계에 쓰이는 도구명, 한국어)"] - MUST be array, use [] if empty,
+      "heat_level": "String - MUST be exactly: High, Medium, Low, Off (capitalized) or null",
+      "timer_seconds": Integer (추정 소요 시간(초), 불확실하면 null - 숫자 또는 null, 문자열 금지),
+      "tip": "String (주의사항이나 꿀팁, 한국어, 선택사항)"
+    }
+  ]
+}
+\`\`\`
+
+## STRICT JSON FORMATTING RULES (MUST FOLLOW EXACTLY)
+
+1. **action_type**: MUST be lowercase (e.g., "fry" not "Fry")
+2. **phase**: MUST be lowercase (e.g., "cooking" not "Cooking")
+3. **difficulty**: MUST be capitalized (e.g., "Medium" not "medium")
+4. **heat_level**: MUST be capitalized or null (e.g., "High" not "high")
+5. **All numbers**: MUST be numbers, not strings (e.g., 2 not "2")
+6. **All arrays**: MUST be arrays, not null (use [] for empty arrays)
+7. **step_index**: MUST start from 1 and increment sequentially (1, 2, 3, ...)
+
+Output Format: Respond ONLY with valid JSON. No other explanations needed.`;
 
 const RECOMMENDATION_SYSTEM_PROMPT = `You are a Korean food recommendation expert.
 Suggest recipes based on user preferences, dietary restrictions, or ingredients.
@@ -61,15 +130,15 @@ Guidelines:
 Output Format: JSON only, no explanations.`;
 
 // ============================================================================
-// NanoService Class
+// RecipeCreator Class
 // ============================================================================
 
-export class NanoService {
+export class RecipeCreator {
   private openai: OpenAI;
 
   constructor(apiKey: string) {
     this.openai = new OpenAI({ apiKey });
-    console.log('[NanoService] Initialized');
+    console.log('[RecipeCreator] Initialized');
   }
 
   // ==========================================================================
@@ -78,10 +147,11 @@ export class NanoService {
 
   /**
    * Generate recipe from natural language prompt
+   * Returns PlanningOutput format (same as RecipeCleaner)
    */
-  async generateRecipe(userPrompt: string): Promise<GeneratedRecipe> {
+  async generateRecipe(userPrompt: string): Promise<PlanningOutput> {
     try {
-      console.log(`[NanoService] Generating recipe for: "${userPrompt}"`);
+      console.log(`[RecipeCreator] Generating recipe for: "${userPrompt}"`);
 
       const prompt = this.createGenerationPrompt(userPrompt);
 
@@ -96,27 +166,27 @@ export class NanoService {
         response_format: { type: 'json_object' }
       });
 
-      console.log('[NanoService] Response received:', {
+      console.log('[RecipeCreator] Response received:', {
         finish_reason: response.choices[0].finish_reason,
         has_content: !!response.choices[0].message.content
       });
 
       const content = response.choices[0].message.content;
       if (!content) {
-        console.error('[NanoService] Empty response details:', {
+        console.error('[RecipeCreator] Empty response details:', {
           finish_reason: response.choices[0].finish_reason,
           response: JSON.stringify(response, null, 2)
         });
         throw new Error('Empty response from OpenAI');
       }
 
-      const recipe = JSON.parse(content);
-      this.validateGeneratedRecipe(recipe);
+      const planningOutput = JSON.parse(content);
+      this.validatePlanningOutput(planningOutput);
 
-      console.log(`[NanoService] Successfully generated recipe: ${recipe.title}`);
-      return recipe as GeneratedRecipe;
+      console.log(`[RecipeCreator] Successfully generated recipe: ${planningOutput.meta.title}`);
+      return planningOutput as PlanningOutput;
     } catch (error) {
-      console.error('[NanoService] Recipe generation failed:', error);
+      console.error('[RecipeCreator] Recipe generation failed', error);
       throw error;
     }
   }
@@ -126,7 +196,7 @@ export class NanoService {
    */
   async recommendRecipes(preferences: string): Promise<RecipeRecommendation[]> {
     try {
-      console.log(`[NanoService] Getting recommendations for: "${preferences}"`);
+      console.log(`[RecipeCreator] Getting recommendations for: "${preferences}"`);
 
       const prompt = this.createRecommendationPrompt(preferences);
 
@@ -149,10 +219,10 @@ export class NanoService {
       const result = JSON.parse(content);
       const recommendations = result.recommendations || [];
 
-      console.log(`[NanoService] Generated ${recommendations.length} recommendations`);
+      console.log(`[RecipeCreator] Generated ${recommendations.length} recommendations`);
       return recommendations as RecipeRecommendation[];
     } catch (error) {
-      console.error('[NanoService] Recipe recommendation failed:', error);
+      console.error('[RecipeCreator] Recipe recommendation failed:', error);
       throw error;
     }
   }
@@ -163,69 +233,37 @@ export class NanoService {
 
   /**
    * Create generation prompt
+   * Analyzes user input to extract ingredients, servings, difficulty, cooking methods, etc.
    */
   private createGenerationPrompt(userPrompt: string): string {
-    return `Create a detailed Korean recipe based on this request: "${userPrompt}"
+    return `Create a complete Korean recipe based on this user request: "${userPrompt}"
 
-Requirements:
-1. title: Recipe name in Korean
-2. servings: Number of servings (예: "2인분", "4인분")
-3. cook_time: Total cooking time (예: "30분", "1시간")
-4. difficulty: "easy", "medium", or "hard"
-5. ingredients: Array of ingredients with name, quantity, and optional description
-   - Use Korean units: 그램(g), 밀리리터(ml), 컵, 큰술, 작은술
-   - Be specific with quantities
-6. steps: Array of cooking steps with order and description
-   - Clear, step-by-step instructions
-   - Use natural Korean cooking language
-7. tips: Optional array of helpful cooking tips
+Analyze the user's input and extract:
+- Ingredients mentioned (use as main ingredients)
+- Number of servings if specified (e.g., "2인분" → servings: 2, "4인분" → servings: 4)
+- Difficulty level if specified (e.g., "쉬운", "쉽게" → Easy, "보통" → Medium, "어려운" → Hard)
+- Cooking methods if specified (e.g., "끓이기" → boil, "볶기" → fry, "찌기" → steam)
+- Any other preferences or constraints
 
-Example Output:
-{
-  "title": "김치찌개",
-  "servings": "2인분",
-  "cook_time": "30분",
-  "difficulty": "easy",
-  "ingredients": [
-    {
-      "name": "김치",
-      "quantity": "200g",
-      "description": "신김치가 좋아요"
-    },
-    {
-      "name": "돼지고기",
-      "quantity": "100g"
-    },
-    {
-      "name": "물",
-      "quantity": "2컵"
-    }
-  ],
-  "steps": [
-    {
-      "order": 1,
-      "description": "김치를 송송 썰어주세요."
-    },
-    {
-      "order": 2,
-      "description": "냄비에 돼지고기를 넣고 볶아주세요."
-    },
-    {
-      "order": 3,
-      "description": "김치를 넣고 함께 볶아주세요."
-    },
-    {
-      "order": 4,
-      "description": "물 2컵을 넣고 끓여주세요."
-    }
-  ],
-  "tips": [
-    "신김치를 사용하면 더 맛있어요",
-    "두부를 추가하면 영양이 풍부해져요"
-  ]
-}
+If information is missing, use your culinary knowledge to infer reasonable values:
+- If no servings specified, default to 2 servings
+- If no difficulty specified, estimate based on the dish complexity
+- If no cooking method specified, choose appropriate methods for the dish
+- Create a meaningful Korean dish name based on ingredients and methods
 
-IMPORTANT: Output JSON only. Create a complete, realistic Korean recipe.`;
+Generate a complete recipe following the PlanningOutput schema structure:
+- meta: title, description, servings (number), time_estimate (number, minutes), difficulty ("Easy"/"Medium"/"Hard")
+- ingredients: main and sub arrays with name, amount (number), unit, notes/usage
+- tools: array of required tools (infer from cooking methods)
+- process: array of process steps with phase, step_index, action_type, description, ingredients_needed, tools_needed, heat_level, timer_seconds, tip
+
+IMPORTANT: 
+- Output ONLY valid JSON in PlanningOutput format
+- All text must be in Korean
+- Numbers must be numbers, not strings
+- step_index must start from 1 and increment sequentially
+- Use appropriate action_type (lowercase) and phase (lowercase) values
+- Infer tools, heat levels, and timers based on cooking methods`;
   }
 
   /**
@@ -268,51 +306,80 @@ IMPORTANT: Output JSON only. Provide exactly 3 recommendations.`;
   }
 
   /**
-   * Validate generated recipe structure
+   * Validate PlanningOutput structure
    */
-  private validateGeneratedRecipe(recipe: any): void {
-    const requiredFields = [
-      'title',
-      'servings',
-      'cook_time',
-      'difficulty',
-      'ingredients',
-      'steps'
-    ];
-
-    for (const field of requiredFields) {
-      if (!(field in recipe)) {
-        throw new Error(`Missing required field: ${field}`);
+  private validatePlanningOutput(data: any): void {
+    // Validate top-level structure
+    if (!data.meta) {
+      throw new Error('Missing required field: meta');
+    }
+    if (!data.ingredients) {
+      throw new Error('Missing required field: ingredients');
+    }
+    if (!data.tools) {
+      throw new Error('Missing required field: tools');
+    }
+    if (!data.process) {
+      throw new Error('Missing required field: process');
       }
-    }
 
-    if (!Array.isArray(recipe.ingredients) || recipe.ingredients.length === 0) {
-      throw new Error('Recipe must have at least one ingredient');
+    // Validate meta
+    const meta = data.meta;
+    if (!meta.title || typeof meta.title !== 'string') {
+      throw new Error('meta.title must be a non-empty string');
     }
-
-    if (!Array.isArray(recipe.steps) || recipe.steps.length === 0) {
-      throw new Error('Recipe must have at least one step');
+    if (!meta.description || typeof meta.description !== 'string') {
+      throw new Error('meta.description must be a non-empty string');
     }
-
-    // Validate difficulty
-    const validDifficulties = ['easy', 'medium', 'hard'];
-    if (!validDifficulties.includes(recipe.difficulty)) {
-      throw new Error('Invalid difficulty level');
+    if (typeof meta.servings !== 'number' || meta.servings <= 0) {
+      throw new Error('meta.servings must be a positive number');
+    }
+    if (typeof meta.time_estimate !== 'number' || meta.time_estimate <= 0) {
+      throw new Error('meta.time_estimate must be a positive number');
+    }
+    const validDifficulties = ['Easy', 'Medium', 'Hard'];
+    if (!validDifficulties.includes(meta.difficulty)) {
+      throw new Error(`meta.difficulty must be one of: ${validDifficulties.join(', ')}`);
     }
 
     // Validate ingredients
-    for (let i = 0; i < recipe.ingredients.length; i++) {
-      const ing = recipe.ingredients[i];
-      if (!ing.name || !ing.quantity) {
-        throw new Error(`Ingredient ${i + 1} missing name or quantity`);
-      }
+    if (!data.ingredients.main || !Array.isArray(data.ingredients.main)) {
+      throw new Error('ingredients.main must be an array');
+    }
+    if (!data.ingredients.sub || !Array.isArray(data.ingredients.sub)) {
+      throw new Error('ingredients.sub must be an array');
     }
 
-    // Validate steps
-    for (let i = 0; i < recipe.steps.length; i++) {
-      const step = recipe.steps[i];
-      if (!step.order || !step.description) {
-        throw new Error(`Step ${i + 1} missing order or description`);
+    // Validate tools
+    if (!Array.isArray(data.tools)) {
+      throw new Error('tools must be an array');
+    }
+
+    // Validate process
+    if (!Array.isArray(data.process) || data.process.length === 0) {
+      throw new Error('process must be a non-empty array');
+    }
+
+    // Validate each process step
+    for (let i = 0; i < data.process.length; i++) {
+      const step = data.process[i];
+      if (typeof step.step_index !== 'number' || step.step_index !== i + 1) {
+        throw new Error(`process[${i}].step_index must be ${i + 1}`);
+      }
+      if (!step.phase || !['preparation', 'cooking', 'finishing'].includes(step.phase)) {
+        throw new Error(`process[${i}].phase must be one of: preparation, cooking, finishing`);
+      }
+      if (!step.action_type || typeof step.action_type !== 'string') {
+        throw new Error(`process[${i}].action_type must be a string`);
+      }
+      if (!step.description || typeof step.description !== 'string') {
+        throw new Error(`process[${i}].description must be a non-empty string`);
+      }
+      if (!Array.isArray(step.ingredients_needed)) {
+        throw new Error(`process[${i}].ingredients_needed must be an array`);
+      }
+      if (!Array.isArray(step.tools_needed)) {
+        throw new Error(`process[${i}].tools_needed must be an array`);
       }
     }
   }

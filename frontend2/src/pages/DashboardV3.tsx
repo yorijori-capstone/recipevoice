@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { RecipeCard } from '../components/RecipeCard';
 import { RecipeGenerateModal } from '../components/RecipeGenerateModal';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+import { getApiBaseUrl } from '../utils/api';
+
+const API_BASE_URL = getApiBaseUrl();
 
 interface Recipe {
   id: number;
@@ -143,17 +145,19 @@ export function DashboardV3() {
   return (
     <div className="container" style={{ padding: 'var(--spacing-4)' }}>
       <div className="text-center mb-5" style={{ marginTop: 'var(--spacing-6)' }}>
-        <h1
-          className="display-4 mb-3"
-          style={{
-            fontWeight: 'var(--font-weight-bold)',
-            background: 'linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            backgroundClip: 'text',
-          }}
-        >
-          레시피 모음
+        <h1 className="mb-3" style={{ fontSize: 'clamp(2rem, 5vw, 2.5rem)' }}>
+          <span style={{ marginRight: '12px' }}>🍳</span>
+          <span
+            style={{
+              fontWeight: 'var(--font-weight-extrabold)',
+              background: 'linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+            }}
+          >
+            Yori-Jori
+          </span>
         </h1>
         <p className="text-muted" style={{ fontSize: 'var(--font-size-lg)' }}>
           {isSearching
@@ -166,9 +170,9 @@ export function DashboardV3() {
       <div className="row justify-content-center mb-5">
         <div className="col-12">
           <div
-            className="input-group input-group-lg"
+            className="input-group"
             style={{
-              boxShadow: 'var(--shadow-lg)',
+              boxShadow: '0 2px 12px rgba(181, 181, 181, 0.26)',
               borderRadius: 'var(--radius-lg)',
               overflow: 'hidden',
             }}
@@ -176,13 +180,13 @@ export function DashboardV3() {
             <input
               type="text"
               className="form-control"
-              placeholder="레시피 검색... (예: 김치, 찌개, 볶음)"
+              placeholder="레시피 검색... (예: 김치찌개)"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={handleKeyDown}
               style={{
                 border: 'none',
-                padding: 'var(--spacing-4) var(--spacing-5)',
+                padding: 'var(--spacing-3) var(--spacing-4)',
                 fontSize: 'var(--font-size-lg)',
                 borderRight: '1px solid var(--color-border-light)',
               }}
@@ -193,7 +197,7 @@ export function DashboardV3() {
               onClick={handleSearch}
               disabled={loading}
               style={{
-                padding: 'var(--spacing-4) var(--spacing-6)',
+                padding: 'var(--spacing-3) var(--spacing-5)',
                 fontWeight: 'var(--font-weight-medium)',
                 fontSize: 'var(--font-size-base)',
                 border: 'none',
@@ -232,25 +236,23 @@ export function DashboardV3() {
       {/* AI Recipe Generation Button */}
       <div className="d-flex justify-content-center mb-5">
         <button
-          className="btn btn-success btn-lg"
+          className="btn btn-success"
           onClick={() => setShowGenerateModal(true)}
           style={{
             background: 'var(--color-primary)',
             border: 'none',
             borderRadius: 'var(--radius-lg)',
-            padding: 'var(--spacing-4) var(--spacing-8)',
+            padding: 'var(--spacing-3) var(--spacing-6)',
             fontWeight: 'var(--font-weight-bold)',
-            fontSize: 'var(--font-size-lg)',
+            fontSize: 'var(--font-size-base)',
             boxShadow: 'var(--shadow-lg)',
             transition: 'all var(--transition-base)',
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.transform = 'translateY(-2px)';
             e.currentTarget.style.boxShadow = 'var(--shadow-xl)';
             e.currentTarget.style.background = 'var(--color-primary-dark)';
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.transform = 'translateY(0)';
             e.currentTarget.style.boxShadow = 'var(--shadow-lg)';
             e.currentTarget.style.background = 'var(--color-primary)';
           }}

@@ -86,6 +86,7 @@ export function RecipeDetail() {
           style={{
             borderRadius: 'var(--radius-md)',
             fontWeight: 'var(--font-weight-bold)',
+            boxShadow: '0 2px 8px rgba(242, 98, 46, 0.3)',
           }}
         >
           🍳 요리 시작
@@ -114,8 +115,8 @@ export function RecipeDetail() {
             <span
               className="badge"
               style={{
-                background: 'rgba(78, 205, 196, 0.15)',
-                color: 'var(--color-secondary-dark)',
+                background: 'rgba(207, 99, 22, 0.07)',
+                color: '#cf7c1ded',
                 border: '1px solid var(--color-secondary)',
                 padding: 'var(--spacing-2) var(--spacing-3)',
               }}
@@ -166,7 +167,7 @@ export function RecipeDetail() {
           }}
         >
           <h5 className="mb-0" style={{ fontWeight: 'var(--font-weight-bold)' }}>
-            🥘 재료
+            🥚 재료
           </h5>
         </div>
         <div className="card-body" style={{ padding: 'var(--spacing-4)' }}>
@@ -238,14 +239,14 @@ export function RecipeDetail() {
         }}
       >
         <div
-          className="card-header text-white"
+          className="card-header"
           style={{
             background: 'linear-gradient(135deg, var(--color-secondary) 0%, var(--color-secondary-dark) 100%)',
             padding: 'var(--spacing-4)',
           }}
         >
           <h5 className="mb-0" style={{ fontWeight: 'var(--font-weight-bold)' }}>
-            👨‍🍳 조리 방법
+            🧑🏻‍🍳 조리 방법
           </h5>
         </div>
         <div className="card-body" style={{ padding: 'var(--spacing-4)' }}>
@@ -304,16 +305,21 @@ export function RecipeDetail() {
       >
         <div className="card-body" style={{ padding: 'var(--spacing-4)' }}>
           <small className="text-muted">
-            출처: {recipe.copyright || '알 수 없음'} |
-            <a
-              href={recipe.source_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="ms-2"
-              style={{ color: 'var(--color-primary)' }}
-            >
-              원본 레시피 보기
-            </a>
+            출처: {recipe.copyright || '알 수 없음'}
+            {recipe.source_url && recipe.source_url !== 'AI Generated' && (
+              <>
+                {' | '}
+                <a
+                  href={recipe.source_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="ms-2"
+                  style={{ color: 'var(--color-primary)' }}
+                >
+                  원본 레시피 보기
+                </a>
+              </>
+            )}
           </small>
         </div>
       </div>

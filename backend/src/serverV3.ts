@@ -24,11 +24,12 @@ app.get('/health', (req, res) => {
 app.use('/api/recipes', recipeRoutes);
 
 // Cooking mode API routes (V3: MCP Tool Calling)
-app.use('/api/cooking/v2', cookingV3Routes);
+app.use('/api/cooking/v3', cookingV3Routes);  // v2 → v3로 변경
 
 const PORT = process.env.PORT || 3001;
-const server = app.listen(PORT, () => {
-  console.log(`🚀 Server V3 running on port ${PORT}`);
+const HOST = '0.0.0.0'; // Listen on all network interfaces
+const server = app.listen(PORT, HOST, () => {
+  console.log(`🚀 Server V3 running on ${HOST}:${PORT}`);
 });
 
 // ============================================================================
@@ -111,7 +112,7 @@ wss.on('connection', (ws: WebSocket) => {
 
       // LangChain response (NEW!)
       realtimeService.on('langchain_response', (data: any) => {
-        console.log('[Server V2] LangChain response:', data);
+        console.log('[Server V3] LangChain response:', data);
 
         // Send to frontend
         ws.send(
@@ -152,7 +153,7 @@ wss.on('connection', (ws: WebSocket) => {
 
       console.log(`✅ Realtime handlers setup for session: ${sessionId}`);
     } catch (error: any) {
-      console.error('[Server V2] Failed to setup realtime handlers:', error);
+      console.error('[Server V3] Failed to setup realtime handlers:', error);
       ws.send(
         JSON.stringify({
           type: 'error',
@@ -232,7 +233,7 @@ wss.on('connection', (ws: WebSocket) => {
 
       console.log(`✅ Agent handlers setup for session: ${sessionId}`);
     } catch (error: any) {
-      console.error('[Server V2] Failed to setup agent handlers:', error);
+      console.error('[Server V3] Failed to setup agent handlers:', error);
     }
   };
 
@@ -244,7 +245,7 @@ wss.on('connection', (ws: WebSocket) => {
       switch (data.type) {
         case 'init_session':
           if (data.sessionId) {
-            console.log(`🔧 Initializing V2 session: ${data.sessionId}`);
+            console.log(`🔧 Initializing V3 session: ${data.sessionId}`);
             currentSessionId = data.sessionId;
 
             // Setup all handlers
@@ -255,7 +256,7 @@ wss.on('connection', (ws: WebSocket) => {
               JSON.stringify({
                 type: 'session_initialized',
                 sessionId: data.sessionId,
-                version: 'v2',
+                version: 'v3',
               })
             );
           }
@@ -357,10 +358,10 @@ wss.on('connection', (ws: WebSocket) => {
           break;
 
         default:
-          console.log('[Server V2] Unknown message type:', data.type);
+          console.log('[Server V3] Unknown message type:', data.type);
       }
     } catch (error: any) {
-      console.error('[Server V2] Error processing message:', error);
+      console.error('[Server V3] Error processing message:', error);
       ws.send(
         JSON.stringify({
           type: 'error',
@@ -376,8 +377,8 @@ wss.on('connection', (ws: WebSocket) => {
   });
 
   ws.on('error', (error: Error) => {
-    console.error('[Server V2] WebSocket error:', error);
+    console.error('[Server V3] WebSocket error:', error);
   });
 });
 
-console.log('✅ WebSocket server ready (V2 with LangChain integration)');
+console.log('✅ WebSocket server ready (V3 with MCP Tool Calling)');

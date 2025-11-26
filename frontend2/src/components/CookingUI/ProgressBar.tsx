@@ -13,10 +13,11 @@ export function ProgressBar({ currentStep, totalSteps, status }: ProgressBarProp
   const progressPercentage = (currentStep / totalSteps) * 100;
 
   const getProgressColor = () => {
-    if (status === 'completed') return 'bg-success';
+    // All statuses use orange/warning/danger, no blue
+    if (status === 'completed') return 'bg-primary';
     if (status === 'error') return 'bg-danger';
     if (status === 'paused') return 'bg-warning';
-    return 'bg-primary';
+    return 'bg-primary'; // active status - orange
   };
 
   const getStatusIcon = () => {
@@ -58,7 +59,7 @@ export function ProgressBar({ currentStep, totalSteps, status }: ProgressBarProp
       <div className="card-body">
         {/* Header */}
         <div className="d-flex justify-content-between align-items-center mb-3">
-          <h5 className="mb-0">
+          <h5 className="mb-0" style={{ fontWeight: 'var(--font-weight-bold)' }}>
             {getStatusIcon()} {getStatusText()}
           </h5>
           <span className="badge bg-secondary">
@@ -69,9 +70,8 @@ export function ProgressBar({ currentStep, totalSteps, status }: ProgressBarProp
         {/* Progress Bar */}
         <div className="progress" style={{ height: '30px' }}>
           <div
-            className={`progress-bar progress-bar-striped ${
-              status === 'active' ? 'progress-bar-animated' : ''
-            } ${getProgressColor()}`}
+            className={`progress-bar progress-bar-striped ${status === 'active' ? 'progress-bar-animated' : ''
+              } ${getProgressColor()}`}
             role="progressbar"
             style={{ width: `${progressPercentage}%` }}
             aria-valuenow={progressPercentage}
@@ -84,7 +84,15 @@ export function ProgressBar({ currentStep, totalSteps, status }: ProgressBarProp
 
         {/* Step Indicators */}
         <div className="mt-3">
-          <div className="d-flex justify-content-between">
+          <div 
+            className="d-flex"
+            style={{ 
+              overflowX: 'auto',
+              overflowY: 'hidden',
+              paddingBottom: '5px',
+              scrollbarWidth: 'thin'
+            }}
+          >
             {Array.from({ length: totalSteps }, (_, index) => {
               const stepNumber = index + 1;
               const isCompleted = stepNumber < currentStep;
@@ -94,16 +102,19 @@ export function ProgressBar({ currentStep, totalSteps, status }: ProgressBarProp
                 <div
                   key={stepNumber}
                   className="d-flex flex-column align-items-center"
-                  style={{ flex: 1 }}
+                  style={{ 
+                    flex: '0 0 auto',
+                    minWidth: '40px',
+                    marginRight: '8px'
+                  }}
                 >
                   <div
-                    className={`rounded-circle d-flex align-items-center justify-content-center ${
-                      isCompleted
-                        ? 'bg-success text-white'
-                        : isCurrent
+                    className={`rounded-circle d-flex align-items-center justify-content-center ${isCompleted
+                      ? 'bg-primary text-white'
+                      : isCurrent
                         ? 'bg-primary text-white'
                         : 'bg-light text-muted'
-                    }`}
+                      }`}
                     style={{
                       width: '30px',
                       height: '30px',
@@ -126,7 +137,7 @@ export function ProgressBar({ currentStep, totalSteps, status }: ProgressBarProp
 
         {/* Completion Message */}
         {status === 'completed' && (
-          <div className="alert alert-success mt-3 mb-0">
+          <div className="alert mt-3 mb-0" style={{ backgroundColor: 'rgba(242, 98, 46, 0.1)', borderColor: 'rgba(242, 98, 46, 0.2)', color: 'var(--color-primary-dark)' }}>
             <strong>🎉 축하합니다!</strong> 모든 요리 단계를 완료했습니다.
           </div>
         )}

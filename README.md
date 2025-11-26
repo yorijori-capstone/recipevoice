@@ -42,6 +42,23 @@ graph LR
 
 👉 **[DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md)**
 
+#### 시스템 플로우
+```
+[사용자] → [DashboardV3] → [레시피 검색/선택]
+                ↓
+         [CookingMode] → [음성 상호작용]
+                ↓
+    [WebSocket] → [RealtimeServiceV3]
+                ↓
+         [GPT-4o-realtime] (음성 입출력)
+                ↓
+         [MCP Tool Calling] (Native Tool Execution)
+                ↓
+         [CookingAgentV3] (세션 관리)
+                ↓
+         [PostgreSQL] (레시피 + Planning 데이터)
+```
+
 ### 기술 스택
 - **Frontend**: React, TypeScript, Vite, WebSocket
 - **Backend**: Node.js, Express, TypeScript
