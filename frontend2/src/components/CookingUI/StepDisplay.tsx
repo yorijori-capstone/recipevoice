@@ -14,9 +14,9 @@ interface StepDisplayProps {
 export function StepDisplay({ step, stepNumber, totalSteps }: StepDisplayProps) {
   return (
     <div className="card shadow-lg">
-      <div className="card-header bg-primary text-white">
+      <div className="card-header text-white" style={{ background: 'var(--color-primary)' }}>
         <h4 className="mb-0">
-          <span className="badge bg-light text-primary me-2">{stepNumber}</span>
+          <span className="badge bg-light me-2" style={{ color: 'var(--color-primary)' }}>{stepNumber}</span>
           / {totalSteps} 단계
         </h4>
       </div>
@@ -27,7 +27,7 @@ export function StepDisplay({ step, stepNumber, totalSteps }: StepDisplayProps) 
         </div>
 
         {step.timer_required && (
-          <div className="alert alert-info d-flex align-items-center">
+          <div className="alert d-flex align-items-center" style={{ backgroundColor: 'rgba(242, 98, 46, 0.1)', borderColor: 'rgba(242, 98, 46, 0.2)', color: 'var(--color-primary-dark)' }}>
             <i className="bi bi-clock-fill me-2"></i>
             <div>
               <strong>예상 시간:</strong> {Math.floor(step.estimated_time_sec / 60)}분 {step.estimated_time_sec % 60}초

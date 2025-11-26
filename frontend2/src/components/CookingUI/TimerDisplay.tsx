@@ -151,7 +151,7 @@ export const TimerDisplay = forwardRef<TimerDisplayRef, TimerDisplayProps>(({
 
   const getProgressColor = (): string => {
     const percentage = getProgressPercentage();
-    if (percentage < 50) return 'bg-success';
+    if (percentage < 50) return 'bg-primary';
     if (percentage < 80) return 'bg-warning';
     return 'bg-danger';
   };
@@ -169,7 +169,7 @@ export const TimerDisplay = forwardRef<TimerDisplayRef, TimerDisplayProps>(({
 
   return (
     <div className="card shadow">
-      <div className="card-header bg-info text-white">
+      <div className="card-header text-white" style={{ background: 'var(--color-primary)' }}>
         <h5 className="mb-0">⏱️ 타이머</h5>
       </div>
       <div className="card-body">
@@ -178,8 +178,8 @@ export const TimerDisplay = forwardRef<TimerDisplayRef, TimerDisplayProps>(({
           <div
             className="display-3 fw-bold"
             style={{
-              color: remainingTime <= 10 ? '#dc3545' : '#0d6efd',
-              fontFamily: 'monospace'
+              fontFamily: 'monospace',
+              color: remainingTime <= 10 ? '#dc3545' : 'var(--color-primary)',
             }}
           >
             {formatTime(remainingTime)}
@@ -248,7 +248,7 @@ export const TimerDisplay = forwardRef<TimerDisplayRef, TimerDisplayProps>(({
 
         {/* Status */}
         {remainingTime === 0 && (
-          <div className="alert alert-success mt-3 mb-0">
+          <div className="alert mt-3 mb-0" style={{ backgroundColor: 'rgba(242, 98, 46, 0.1)', borderColor: 'rgba(242, 98, 46, 0.2)', color: 'var(--color-primary-dark)' }}>
             <i className="bi bi-check-circle-fill me-2"></i>
             시간이 완료되었습니다!
           </div>
