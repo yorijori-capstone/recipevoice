@@ -91,7 +91,8 @@ export class NanoService {
           { role: 'system', content: GENERATION_SYSTEM_PROMPT },
           { role: 'user', content: prompt }
         ],
-        max_completion_tokens: 8192,  // 토큰 제한 수정: Increased for gpt-5-nano reasoning + output
+        reasoning_effort: 'low',  // Reduce reasoning tokens: low/medium/high
+        max_completion_tokens: 4096,
         response_format: { type: 'json_object' }
       });
 
@@ -135,7 +136,8 @@ export class NanoService {
           { role: 'system', content: RECOMMENDATION_SYSTEM_PROMPT },
           { role: 'user', content: prompt }
         ],
-        max_completion_tokens: 4096,  // 토큰 제한 수정: Increased for gpt-5-nano reasoning + output
+        reasoning_effort: 'low',
+        max_completion_tokens: 2048,
         response_format: { type: 'json_object' }
       });
 
