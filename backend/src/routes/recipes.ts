@@ -1,7 +1,7 @@
 import express from 'express';
 import { RecipeService } from '../services/recipeService.js';
-import { NanoService } from '../services/nanoService.js';
-import { CleanedRecipeService } from '../services/cleanedRecipeService.js';
+import { RecipeCreator } from '../services/recipeCreator.js';
+import { RecipeCleaner } from '../services/recipeCleaner.js';
 import { pool } from '../db/pool.js';
 import dotenv from 'dotenv';
 
@@ -9,8 +9,8 @@ dotenv.config();
 
 const router = express.Router();
 const recipeService = new RecipeService();
-const nanoService = new NanoService(process.env.OPENAI_API_KEY || '');
-const cleanedRecipeService = new CleanedRecipeService(process.env.OPENAI_API_KEY || '');
+const recipeCreator = new RecipeCreator(process.env.OPENAI_API_KEY || '');
+const recipeCleaner = new RecipeCleaner(process.env.OPENAI_API_KEY || '');
 
 // 레시피 목록
 router.get('/', async (req, res) => {
@@ -106,8 +106,7 @@ router.get('/:recipeId/cleaned', async (req, res) => {
 
     console.log(`[Recipe API] Getting cleaned recipe: ${recipeId}`);
 
-    const cleanedRecipe = await cleanedRecipeService.getCleanedRecipe(recipeId);
-
+    const cleanedRecipe = await recipeCleaner.getCleanedRecipe(recipeId);
     if (!cleanedRecipe) {
       return res.status(404).json({
         error: 'Cleaned recipe not found',
@@ -128,11 +127,105 @@ router.get('/:recipeId/cleaned', async (req, res) => {
   }
 });
 
-// 레시피 상세 (raw recipe)
+// 레시피 상세 (cleaned recipe 우선, 없으면 raw recipe)
 router.get('/:recipeId', async (req, res) => {
   try {
-    const recipe = await recipeService.getRecipeById(req.params.recipeId);
+    const { recipeId } = req.params;
+    
+    // 먼저 cleaned recipe 확인
+    const cleanedRecipe = await recipeCleaner.getCleanedRecipe(recipeId);
+    
+    if (cleanedRecipe && cleanedRecipe.planning_result) {
+      // cleaned recipe가 있으면 planning_result에서 데이터 추출하여 프론트엔드 형식으로 변환
+      const planning = cleanedRecipe.planning_result;
+      
+      // recipes 테이블에서 메타 정보 가져오기
+      const recipeInfo = await pool.query(
+        'SELECT copyright, source_url, servings, cook_time, difficulty FROM recipes WHERE recipe_id = $1',
+        [recipeId]
+      );
 
+      const recipeRow = recipeInfo.rows[0];
+      let copyright = recipeRow?.copyright || null;
+      let sourceUrl = recipeRow?.source_url || null;
+      let servings = recipeRow?.servings || null;
+      let cookTime = recipeRow?.cook_time || null;
+      let difficulty = recipeRow?.difficulty || null;
+      
+      // 새로 생성한 레시피인지 확인 (recipe_id가 recipe_gen_으로 시작)
+      const isGenerated = recipeId.startsWith('recipe_gen_');
+      
+      // 출처 설정
+      if (isGenerated) {
+        copyright = 'Recipe by Recipe Creator';
+      } else if (copyright) {
+        copyright = `Recipe by ${copyright}`;
+      } else {
+        copyright = 'Recipe by 알 수 없음';
+      }
+      
+      // ingredients 변환 (planning_result.ingredients -> 프론트엔드 형식)
+      const allIngredients = planning.ingredients
+        ? [
+            ...(planning.ingredients.main || []).map((ing, idx) => ({
+              id: idx + 1,
+              name: ing.name,
+              quantity: `${ing.amount}${ing.unit}`.trim(),
+              description: ing.notes || null,
+              display_order: idx + 1
+            })),
+            ...(planning.ingredients.sub || []).map((ing, idx) => ({
+              id: (planning.ingredients.main || []).length + idx + 1,
+              name: ing.name,
+              quantity: `${ing.amount}${ing.unit}`.trim(),
+              description: ing.usage || null,
+              display_order: (planning.ingredients.main || []).length + idx + 1
+            }))
+          ]
+        : cleanedRecipe.ingredients || []; // Use cleaned recipe ingredients as fallback
+
+      // steps 변환: AI 생성 레시피는 process 사용, 기존 레시피는 planned_steps 사용
+      const steps = planning.process
+        ? (planning.process || []).map((step) => ({
+            id: step.step_index,
+            step_number: step.step_index,
+            description: step.description,
+            image_url: null,
+            duration: step.timer_seconds
+          }))
+        : (planning.planned_steps || []).map((step) => ({
+            id: step.order,
+            step_number: step.order,
+            description: step.script,
+            image_url: null,
+            duration: step.estimated_time_sec
+          }));
+
+      // tips 추출 (process에서 tip이 있는 것들)
+      const tips = planning.process
+        ? (planning.process || [])
+            .filter(step => step.tip && step.tip.trim())
+            .map(step => step.tip!)
+        : [];
+      
+      // 프론트엔드가 기대하는 형식으로 반환
+      return res.json({
+        id: cleanedRecipe.id,
+        recipe_id: cleanedRecipe.recipe_id,
+        title: planning.meta ? planning.meta.title : planning.title,
+        servings: planning.meta ? `${planning.meta.servings}인분` : (servings || '알 수 없음'),
+        cook_time: planning.meta ? `${planning.meta.time_estimate}분` : (cookTime || '알 수 없음'),
+        difficulty: planning.meta ? planning.meta.difficulty : (difficulty || '보통'),
+        source_url: sourceUrl || null,  // cleaned data의 url, 없으면 raw data에서 가져옴
+        copyright: copyright,  // "Recipe by <작성자>" 형식
+        tips: tips,
+        ingredients: allIngredients,
+        steps: steps
+      });
+    }
+    
+    // cleaned recipe가 없으면 기존 raw recipe 사용 (fallback)
+    const recipe = await recipeService.getRecipeById(recipeId);
     if (!recipe) {
       return res.status(404).json({ error: 'Recipe not found' });
     }
@@ -353,72 +446,84 @@ router.post('/generate', async (req, res) => {
 
     console.log(`[Recipe API] Generating recipe for: "${prompt}"`);
 
-    // Step 1: Generate recipe using GPT-3.5-turbo
-    const generatedRecipe = await nanoService.generateRecipe(prompt);
+    // Step 1: Generate recipe using GPT-5-nano (returns PlanningOutput)
+    const planningOutput = await recipeCreator.generateRecipe(prompt);
 
     // Step 2: Generate unique recipe_id
     const recipeId = `recipe_gen_${Date.now()}`;
 
-    // Step 3: Save to raw recipe database
+    // Step 3: Save PlanningOutput directly to cleaned DB
+    console.log(`[Recipe API] Saving recipe to cleaned DB: ${recipeId}`);
+    const cleanedRecipe = await recipeCleaner.saveCleanedRecipe(recipeId, planningOutput);
+
+    // Step 4: Optionally save to raw recipe database for reference
     const client = await pool.connect();
     try {
-      await client.query('BEGIN');
+      // Save ingredients to raw DB for compatibility
+      const allIngredients = [...planningOutput.ingredients.main, ...planningOutput.ingredients.sub];
 
-      // Insert recipe
-      await client.query(
-        `INSERT INTO recipes (recipe_id, title, servings, cook_time, difficulty, tips, source_url, copyright)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [
-          recipeId,
-          generatedRecipe.title,
-          generatedRecipe.servings,
-          generatedRecipe.cook_time,
-          generatedRecipe.difficulty,
-          generatedRecipe.tips || [],
-          'AI Generated',
-          'Generated by GPT-3.5-turbo'
-        ]
-      );
+      if (allIngredients.length > 0) {
+        await client.query('BEGIN');
 
-      // Insert ingredients
-      for (let i = 0; i < generatedRecipe.ingredients.length; i++) {
-        const ing = generatedRecipe.ingredients[i];
-        await client.query(
-          `INSERT INTO ingredients (recipe_id, name, quantity, description, display_order)
-           VALUES ($1, $2, $3, $4, $5)`,
-          [recipeId, ing.name, ing.quantity, ing.description || null, i + 1]
-        );
+        // 기존 재료 삭제 (중복 방지)
+        await client.query('DELETE FROM ingredients WHERE recipe_id = $1', [recipeId]);
+
+        // 새 재료 삽입
+        for (let i = 0; i < allIngredients.length; i++) {
+          const ing = allIngredients[i];
+          
+          // 안전한 데이터 변환 및 null 체크
+          if (!ing.name) {
+            console.warn(`[Recipe API] Skipping ingredient with no name at index ${i}`);
+            continue;
+          }
+          
+          const quantity = ing.amount && ing.unit 
+            ? `${ing.amount}${ing.unit}`.trim()
+            : ing.amount || ing.unit || '';
+          
+          const description = ing.notes || ing.usage || null;
+          const displayOrder = i + 1; // 정수값 보장
+          
+          await client.query(
+            `INSERT INTO ingredients (recipe_id, name, quantity, description, display_order)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [
+              recipeId,
+              ing.name,
+              quantity,
+              description,
+              displayOrder
+            ]
+          );
+        }
+
+        await client.query('COMMIT');
+        console.log(`[Recipe API] Raw recipe ingredients saved: ${recipeId}`);
+      } else {
+        console.log(`[Recipe API] No ingredients to save for ${recipeId}`);
       }
-
-      // Insert steps
-      for (const step of generatedRecipe.steps) {
-        await client.query(
-          `INSERT INTO steps (recipe_id, step_number, description)
-           VALUES ($1, $2, $3)`,
-          [recipeId, step.order, step.description]
-        );
+    } catch (error: any) {
+      // ROLLBACK 시도 (실패해도 무시)
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackError) {
+        // 이미 롤백되었거나 트랜잭션이 없는 경우 무시
       }
-
-      await client.query('COMMIT');
-      console.log(`[Recipe API] Raw recipe saved: ${recipeId}`);
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
+      console.error('[Recipe API] Failed to save raw recipe ingredients (non-critical):', error);
+      // Don't throw - cleaned recipe is already saved
     } finally {
       client.release();
     }
 
-    // Step 4: Automatically clean and plan the recipe
-    console.log(`[Recipe API] Auto-planning recipe: ${recipeId}`);
-    const cleanedRecipe = await cleanedRecipeService.cleanAndPlanRecipe(recipeId);
-
-    // Step 5: Return result
+    // Step 5: Return result (ready for immediate use in session)
     res.json({
       success: true,
       recipe_id: recipeId,
-      title: generatedRecipe.title,
+      title: planningOutput.meta.title,
       cleaned_recipe_id: cleanedRecipe.id,
-      message: 'Recipe generated and planned successfully'
+      planning_result: planningOutput, // Return PlanningOutput for immediate use
+      message: 'Recipe generated and saved successfully'
     });
 
     console.log(`[Recipe API] Recipe generation completed: ${recipeId}`);
@@ -445,7 +550,7 @@ router.post('/recommend', async (req, res) => {
 
     console.log(`[Recipe API] Getting recommendations for: "${preferences}"`);
 
-    const recommendations = await nanoService.recommendRecipes(preferences);
+    const recommendations = await recipeCreator.recommendRecipes(preferences);
 
     res.json({
       success: true,

@@ -16,15 +16,15 @@ graph TD
     Frontend -->|HTTP/WebSocket| Backend[Backend （Express）]
     
     subgraph Backend Services
-        Backend -->|Recipe Generation| NanoService[NanoService （gpt-5-nano）]
-        Backend -->|Planning| CleanedRecipeService[CleanedRecipeService]
+        Backend -->|Recipe Generation| RecipeCreator[RecipeCreator （gpt-5-nano）]
+        Backend -->|Planning| RecipeCleaner[RecipeCleaner]
         Backend -->|Session Mgmt| SessionService[SessionService]
         Backend -->|Voice/Tools| RealtimeService[RealtimeServiceV3]
     end
     
     subgraph External APIs
         RealtimeService -->|WebSocket| OpenAI[OpenAI Realtime API]
-        NanoService -->|HTTP| OpenAI_GPT5[OpenAI gpt-5-nano]
+        RecipeCreator -->|HTTP| OpenAI_GPT5[OpenAI gpt-5-nano]
     end
     
     subgraph Data Layer
@@ -68,8 +68,9 @@ graph TD
 ### Backend （`backend/src/`）
 - **`serverV3.ts`**: 메인 엔트리포인트, WebSocket 서버 설정
 - **`services/realtimeServiceV3.ts`**: OpenAI Realtime API 연동 및 도구 실행 관리
-- **`services/nanoService.ts`**: `gpt-5-nano`를 이용한 레시피 생성 및 추천
-- **`mcp/mcpClientManager.ts`**: MCP （Model Context Protocol） 도구 관리자
+- **`services/recipeCreator.ts`**: `gpt-5-nano`를 이용한 레시피 생성 및 추천
+- **`services/recipeCleaner.ts`**: 레시피 정제 및 Planning 결과 관리
+- **`mcp/mcp-client.ts`**: MCP （Model Context Protocol） 도구 관리자
 
 ### Frontend （`frontend2/src/`）
 - **`pages/CookingMode.tsx`**: 요리 진행 메인 화면
