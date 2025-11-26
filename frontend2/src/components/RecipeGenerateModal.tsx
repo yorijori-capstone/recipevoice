@@ -11,7 +11,9 @@ interface RecipeGenerateModalProps {
   initialPrompt?: string;
 }
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+import { getApiBaseUrl } from '../utils/api';
+
+const API_BASE_URL = getApiBaseUrl();
 
 export function RecipeGenerateModal({ onClose, onRecipeGenerated, initialPrompt = '' }: RecipeGenerateModalProps) {
   const [prompt, setPrompt] = useState(initialPrompt);
@@ -20,11 +22,11 @@ export function RecipeGenerateModal({ onClose, onRecipeGenerated, initialPrompt 
   const [generatedRecipe, setGeneratedRecipe] = useState<any | null>(null);
 
   const examplePrompts = [
-    '김치찌개 만들고 싶어요',
-    '간단한 파스타 레시피',
-    '초보자도 할 수 있는 카레',
-    '매운 떡볶이',
-    '건강한 샐러드'
+    '1인분 원팬 명란 알리오 올리오',
+    '감자 활용 다이어트 레시피',
+    '3인분 등촌 샤브샤브',
+    '2인분 돼지고기 김치찌개',
+    '순두부 활용 단백질 많은 레시피'
   ];
 
   const handleGenerate = async () => {
@@ -92,11 +94,11 @@ export function RecipeGenerateModal({ onClose, onRecipeGenerated, initialPrompt 
         tabIndex={-1}
         style={{ zIndex: 1050 }}
       >
-        <div className="modal-dialog modal-lg modal-dialog-scrollable">
+        <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable" style={{ maxWidth: '500px', width: '95%', margin: '1rem auto' }}>
           <div className="modal-content">
             {/* Header */}
-            <div className="modal-header bg-success text-white">
-              <h5 className="modal-title">🤖 AI 레시피 생성</h5>
+            <div className="modal-header text-white" style={{ background: 'var(--color-primary)' }}>
+              <h5 className="modal-title" style={{ fontSize: '1.1rem' }}>✨ AI 레시피 생성</h5>
               <button
                 type="button"
                 className="btn-close btn-close-white"
@@ -111,20 +113,21 @@ export function RecipeGenerateModal({ onClose, onRecipeGenerated, initialPrompt 
               {!generatedRecipe ? (
                 <>
                   {/* Input Section */}
-                  <div className="mb-4">
-                    <label htmlFor="recipePrompt" className="form-label">
+                  <div className="mb-3">
+                    <label htmlFor="recipePrompt" className="form-label" style={{ fontSize: '0.95rem' }}>
                       어떤 요리를 만들고 싶으세요?
                     </label>
                     <input
                       type="text"
-                      className="form-control form-control-lg"
+                      className="form-control"
                       id="recipePrompt"
-                      placeholder="예: 김치찌개 만들고 싶어요"
+                      placeholder="예: 자취생이 30분 이내로 간단하게 만들 수 있는 파스타 레시피"
                       value={prompt}
                       onChange={(e) => setPrompt(e.target.value)}
                       onKeyPress={handleKeyPress}
                       disabled={loading}
                       autoFocus
+                      style={{ fontSize: '0.9rem' }}
                     />
                   </div>
 
@@ -155,7 +158,7 @@ export function RecipeGenerateModal({ onClose, onRecipeGenerated, initialPrompt 
                   {/* Loading State */}
                   {loading && (
                     <div className="text-center py-4">
-                      <div className="spinner-border text-success mb-3" role="status">
+                      <div className="spinner-border text-primary mb-3" role="status">
                         <span className="visually-hidden">Loading...</span>
                       </div>
                       <p className="text-muted">
@@ -167,7 +170,7 @@ export function RecipeGenerateModal({ onClose, onRecipeGenerated, initialPrompt 
 
                   {/* Info Box */}
                   {!loading && (
-                    <div className="alert alert-info">
+                    <div className="alert alert-success" style={{ backgroundColor: 'rgba(255, 107, 53, 0.1)', borderColor: 'rgba(255, 107, 53, 0.2)', color: 'var(--color-primary-dark)' }}>
                       <h6 className="alert-heading">ℹ️ AI 레시피 생성 안내</h6>
                       <ul className="mb-0 small">
                         <li>RecipeCreator가 레시피를 자동으로 생성합니다</li>
@@ -180,7 +183,7 @@ export function RecipeGenerateModal({ onClose, onRecipeGenerated, initialPrompt 
               ) : (
                 <>
                   {/* Generated Recipe Display */}
-                  <div className="alert alert-success">
+                  <div className="alert" style={{ backgroundColor: 'rgba(255, 107, 53, 0.1)', borderColor: 'rgba(255, 107, 53, 0.2)', color: 'var(--color-primary-dark)' }}>
                     <h5 className="alert-heading">✅ 레시피 생성 완료!</h5>
                     <p className="mb-0">
                       <strong>{generatedRecipe.title}</strong> 레시피가 생성되었습니다.
@@ -196,7 +199,7 @@ export function RecipeGenerateModal({ onClose, onRecipeGenerated, initialPrompt 
                         <strong>제목:</strong> {generatedRecipe.title}
                         <br />
                         <strong>상태:</strong>{' '}
-                        <span className="badge bg-success">Planning 완료</span>
+                        <span className="badge bg-primary">Planning 완료</span>
                       </p>
                     </div>
                   </div>
@@ -227,7 +230,7 @@ export function RecipeGenerateModal({ onClose, onRecipeGenerated, initialPrompt 
                   </button>
                   <button
                     type="button"
-                    className="btn btn-success"
+                    className="btn btn-primary"
                     onClick={handleGenerate}
                     disabled={loading || !prompt.trim()}
                   >
@@ -241,7 +244,7 @@ export function RecipeGenerateModal({ onClose, onRecipeGenerated, initialPrompt 
                         생성 중...
                       </>
                     ) : (
-                      '🤖 레시피 생성하기'
+                      '✨ 레시피 생성하기'
                     )}
                   </button>
                 </>
@@ -252,7 +255,7 @@ export function RecipeGenerateModal({ onClose, onRecipeGenerated, initialPrompt 
                   </button>
                   <button
                     type="button"
-                    className="btn btn-success btn-lg"
+                    className="btn btn-primary btn-lg"
                     onClick={handleStartCooking}
                   >
                     🍳 요리 시작하기
