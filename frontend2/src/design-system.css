@@ -3,7 +3,8 @@
    ============================================ */
 
 /* Google Fonts Import */
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap');
+/* Pretendard Font Import */
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css");
 
 /* ============================================
    CSS Variables - Design Tokens
@@ -11,17 +12,17 @@
 
 :root {
   /* Color Palette - 따뜻하고 친근한 요리 앱 컬러 */
-  --color-primary: #FF6B35;
-  --color-primary-light: #FF8C61;
-  --color-primary-dark: #E55A2B;
+  --color-primary: #f2622e;
+  --color-primary-light: #ff9974;
+  --color-primary-dark: #cf5026;
   --color-primary-gradient: linear-gradient(135deg, #FF6B35 0%, #FF8C61 100%);
 
-  --color-secondary: #4ECDC4;
-  --color-secondary-light: #6FD9D1;
-  --color-secondary-dark: #3DB8AF;
+  --color-secondary: #fec26d;
+  --color-secondary-light: #ffe3b9;
+  --color-secondary-dark: #fba854;
 
   --color-accent: #FFD93D;
-  --color-accent-light: #FFE066;
+  --color-accent-light: #ffeda5;
   --color-accent-dark: #E6C337;
 
   /* Neutral Colors */
@@ -43,7 +44,7 @@
   --color-info: #4A90E2;
 
   /* Typography */
-  --font-family-base: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-family-base: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif;
 
   --font-size-xs: 0.75rem;
   /* 12px */
@@ -62,7 +63,9 @@
 
   --font-weight-regular: 400;
   --font-weight-medium: 500;
+  --font-weight-semibold: 600;
   --font-weight-bold: 700;
+  --font-weight-extrabold: 800;
 
   --line-height-tight: 1.25;
   --line-height-normal: 1.5;
@@ -261,16 +264,16 @@ body {
 
 /* Buttons */
 .btn-primary {
-  background: var(--color-primary);
-  border-color: var(--color-primary);
-  color: white;
+  background: var(--color-primary) !important;
+  border-color: var(--color-primary) !important;
+  color: white !important;
   font-weight: var(--font-weight-medium);
   transition: all var(--transition-base);
 }
 
 .btn-primary:hover {
-  background: var(--color-primary-dark);
-  border-color: var(--color-primary-dark);
+  background: var(--color-primary-dark) !important;
+  border-color: var(--color-primary-dark) !important;
   transform: translateY(-2px);
   box-shadow: var(--shadow-md);
 }
@@ -345,4 +348,53 @@ body {
 .navbar {
   box-shadow: var(--shadow-md);
   background: var(--color-surface) !important;
+}
+
+/* Bootstrap Utility Overrides for Orange Theme */
+.bg-success {
+  background-color: var(--color-primary) !important;
+}
+
+.text-success {
+  color: var(--color-primary) !important;
+}
+
+.alert-success {
+  color: var(--color-primary-dark);
+  background-color: rgba(255, 107, 53, 0.15);
+  border-color: rgba(255, 107, 53, 0.3);
+}
+
+.badge.bg-success {
+  background-color: var(--color-primary) !important;
+}
+
+.btn-secondary {
+  background-color: #9E9E9E;
+  border-color: #9E9E9E;
+  color: white;
+}
+
+.btn-secondary:hover {
+  background-color: #757575;
+  border-color: #757575;
+}
+
+.spinner-border.text-success {
+  color: var(--color-primary) !important;
+}
+
+/* Progress Bar Override */
+.progress-bar.bg-primary {
+  background-color: var(--color-primary) !important;
+}
+
+/* Background Primary Override - Ensure orange everywhere */
+.bg-primary {
+  background-color: var(--color-primary) !important;
+}
+
+/* Step Indicator Override */
+.rounded-circle.bg-primary {
+  background-color: var(--color-primary) !important;
 }

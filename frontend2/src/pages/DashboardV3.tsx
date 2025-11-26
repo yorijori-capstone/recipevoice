@@ -143,17 +143,19 @@ export function DashboardV3() {
   return (
     <div className="container" style={{ padding: 'var(--spacing-4)' }}>
       <div className="text-center mb-5" style={{ marginTop: 'var(--spacing-6)' }}>
-        <h1
-          className="display-4 mb-3"
-          style={{
-            fontWeight: 'var(--font-weight-bold)',
-            background: 'linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            backgroundClip: 'text',
-          }}
-        >
-          레시피 모음
+        <h1 className="display-4 mb-3">
+          <span style={{ marginRight: '12px' }}>🍳</span>
+          <span
+            style={{
+              fontWeight: 'var(--font-weight-extrabold)',
+              background: 'linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+            }}
+          >
+            Yori-Jori
+          </span>
         </h1>
         <p className="text-muted" style={{ fontSize: 'var(--font-size-lg)' }}>
           {isSearching

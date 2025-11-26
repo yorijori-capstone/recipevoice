@@ -192,8 +192,8 @@ export const VoiceInteraction = forwardRef<VoiceInteractionRef, VoiceInteraction
     <div className="card">
       <div className="card-header">
         <div className="d-flex justify-content-between align-items-center mb-2">
-          <h5 className="mb-0">🎙️ 음성 대화</h5>
-          <span className={`badge ${isConnected ? 'bg-success' : 'bg-secondary'}`}>
+          <h5 className="mb-0" style={{ fontWeight: 'var(--font-weight-bold)' }}>🎙️ 음성 대화</h5>
+          <span className={`badge ${isConnected ? 'bg-secondary' : 'bg-secondary'}`}>
             {isConnected ? '✅ 연결됨' : '⏳ 연결 중...'}
           </span>
         </div>
@@ -201,15 +201,15 @@ export const VoiceInteraction = forwardRef<VoiceInteractionRef, VoiceInteraction
         {/* V3: Simple ON/OFF Toggle (Manual mode removed) */}
         <button
           type="button"
-          className={`btn w-100 ${voiceMode === 'auto' ? 'btn-success' : 'btn-outline-primary'}`}
+          className={`btn w-100 ${voiceMode === 'auto' ? 'btn-primary' : 'btn-outline-secondary'}`}
           onClick={() => setVoiceMode(voiceMode === 'auto' ? 'none' : 'auto')}
           disabled={!isConnected}
         >
-          {voiceMode === 'auto' ? '🎤 음성 대화 ON' : '🔇 음성 대화 OFF'}
+          {voiceMode === 'auto' ? '🎤 음성 대화 OFF' : '🔇 음성 대화 ON'}
         </button>
 
         {voiceMode === 'none' && (
-          <div className="alert alert-info mt-2 mb-0" style={{ fontSize: '0.9rem' }}>
+          <div className="alert mt-2 mb-0" style={{ fontSize: '0.9rem', backgroundColor: 'rgba(242, 98, 46, 0.1)', borderColor: 'rgba(242, 98, 46, 0.2)', color: 'var(--color-primary-dark)' }}>
             💡 버튼을 눌러 음성 대화를 시작하세요
           </div>
         )}
@@ -245,7 +245,7 @@ export const VoiceInteraction = forwardRef<VoiceInteractionRef, VoiceInteraction
                   : (
                     <div>
                       <div className="mb-2">🎤 말씀하시면 자동으로 인식됩니다</div>
-                      <div className="alert alert-success py-2 px-3 d-inline-block">
+                      <div className="alert py-2 px-3 d-inline-block" style={{ backgroundColor: 'rgba(242, 98, 46, 0.1)', borderColor: 'rgba(242, 98, 46, 0.2)', color: 'var(--color-primary-dark)' }}>
                         <strong>👋 "안녕"</strong>이라고 인사해서 요리를 시작하세요!
                       </div>
                     </div>
@@ -263,8 +263,8 @@ export const VoiceInteraction = forwardRef<VoiceInteractionRef, VoiceInteraction
                 >
                   <div
                     className={`p-3 rounded shadow-sm ${transcript.role === 'user'
-                        ? 'bg-primary text-white'
-                        : 'bg-white border'
+                      ? 'bg-primary text-white'
+                      : 'bg-white border'
                       }`}
                     style={{
                       maxWidth: '80%',
@@ -273,7 +273,7 @@ export const VoiceInteraction = forwardRef<VoiceInteractionRef, VoiceInteraction
                   >
                     <div className="d-flex align-items-center gap-2 mb-1">
                       <strong className="text-uppercase" style={{ fontSize: '0.75rem' }}>
-                        {transcript.role === 'user' ? '👤 사용자' : '🤖 AI 요리 가이드'}
+                        {transcript.role === 'user' ? '사용자' : '🍳 Yori-Jori'}
                       </strong>
                       <small className="opacity-75" style={{ fontSize: '0.7rem' }}>
                         {transcript.timestamp.toLocaleTimeString('ko-KR', {
@@ -296,7 +296,7 @@ export const VoiceInteraction = forwardRef<VoiceInteractionRef, VoiceInteraction
         {/* Auto Mode Status */}
         {voiceMode === 'auto' && (
           <div className="text-center">
-            <div className="text-success">
+            <div className="text-primary">
               <i className="bi bi-mic-fill fs-1"></i>
             </div>
             <div className="text-muted mt-2">

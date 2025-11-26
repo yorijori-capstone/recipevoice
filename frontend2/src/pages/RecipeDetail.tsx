@@ -114,8 +114,8 @@ export function RecipeDetail() {
             <span
               className="badge"
               style={{
-                background: 'rgba(78, 205, 196, 0.15)',
-                color: 'var(--color-secondary-dark)',
+                background: 'rgba(207, 99, 22, 0.07)',
+                color: '#cf7c1ded',
                 border: '1px solid var(--color-secondary)',
                 padding: 'var(--spacing-2) var(--spacing-3)',
               }}
@@ -166,7 +166,7 @@ export function RecipeDetail() {
           }}
         >
           <h5 className="mb-0" style={{ fontWeight: 'var(--font-weight-bold)' }}>
-            🥘 재료
+            🥚 재료
           </h5>
         </div>
         <div className="card-body" style={{ padding: 'var(--spacing-4)' }}>

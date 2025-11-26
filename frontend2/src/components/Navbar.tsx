@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import logoImage from '../assets/yorijori-logo-basic.png';
+import youtubeLogo from '../assets/YouTube_Logo_2017.png';
 
 export function Navbar() {
   return (
@@ -11,28 +11,7 @@ export function Navbar() {
         borderBottom: '1px solid rgba(255, 107, 53, 0.1)',
       }}
     >
-      <div className="container">
-        <Link className="navbar-brand d-flex align-items-center fw-bold" to="/" style={{ gap: '12px' }}>
-          <img
-            src={logoImage}
-            alt="요리조리 로고"
-            style={{
-              height: '40px',
-              width: 'auto',
-              filter: 'drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1))'
-            }}
-          />
-          <span style={{
-            fontSize: '1.5rem',
-            background: 'linear-gradient(135deg, #FF6B35 0%, #FF8C61 100%)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            backgroundClip: 'text',
-          }}>
-            요리조리
-          </span>
-        </Link>
-
+      <div className="container d-flex justify-content-center">
         <button
           className="navbar-toggler"
           type="button"
@@ -43,8 +22,8 @@ export function Navbar() {
           <span className="navbar-toggler-icon"></span>
         </button>
 
-        <div className="collapse navbar-collapse" id="navbarNav">
-          <ul className="navbar-nav ms-auto" style={{ gap: '8px' }}>
+        <div className="collapse navbar-collapse justify-content-center" id="navbarNav">
+          <ul className="navbar-nav" style={{ gap: '20px', alignItems: 'center' }}>
             <li className="nav-item">
               <Link
                 className="nav-link px-3 py-2"
@@ -53,6 +32,7 @@ export function Navbar() {
                   borderRadius: 'var(--radius-md)',
                   transition: 'all var(--transition-base)',
                   fontWeight: '500',
+                  fontSize: '1.1rem',
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.backgroundColor = 'rgba(255, 107, 53, 0.1)';
@@ -68,12 +48,14 @@ export function Navbar() {
             </li>
             <li className="nav-item">
               <Link
-                className="nav-link px-3 py-2"
-                to="/voice-test"
+                className="nav-link px-3 py-2 d-flex align-items-center"
+                to="/youtube-search"
                 style={{
                   borderRadius: 'var(--radius-md)',
                   transition: 'all var(--transition-base)',
                   fontWeight: '500',
+                  fontSize: '1.1rem',
+                  gap: '8px',
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.backgroundColor = 'rgba(255, 107, 53, 0.1)';
@@ -84,7 +66,8 @@ export function Navbar() {
                   e.currentTarget.style.color = '';
                 }}
               >
-                🎤 음성 에이전트
+                <img src={youtubeLogo} alt="Youtube" style={{ height: '24px' }} />
+                <span>에서 레시피 찾기</span>
               </Link>
             </li>
           </ul>
