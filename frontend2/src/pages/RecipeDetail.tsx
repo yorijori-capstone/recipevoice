@@ -86,6 +86,7 @@ export function RecipeDetail() {
           style={{
             borderRadius: 'var(--radius-md)',
             fontWeight: 'var(--font-weight-bold)',
+            boxShadow: '0 2px 8px rgba(242, 98, 46, 0.3)',
           }}
         >
           🍳 요리 시작
@@ -238,14 +239,14 @@ export function RecipeDetail() {
         }}
       >
         <div
-          className="card-header text-white"
+          className="card-header"
           style={{
             background: 'linear-gradient(135deg, var(--color-secondary) 0%, var(--color-secondary-dark) 100%)',
             padding: 'var(--spacing-4)',
           }}
         >
           <h5 className="mb-0" style={{ fontWeight: 'var(--font-weight-bold)' }}>
-            👨‍🍳 조리 방법
+            🧑🏻‍🍳 조리 방법
           </h5>
         </div>
         <div className="card-body" style={{ padding: 'var(--spacing-4)' }}>

@@ -27,8 +27,9 @@ app.use('/api/recipes', recipeRoutes);
 app.use('/api/cooking/v2', cookingV3Routes);
 
 const PORT = process.env.PORT || 3001;
-const server = app.listen(PORT, () => {
-  console.log(`🚀 Server V3 running on port ${PORT}`);
+const HOST = '0.0.0.0'; // Listen on all network interfaces
+const server = app.listen(PORT, HOST, () => {
+  console.log(`🚀 Server V3 running on ${HOST}:${PORT}`);
 });
 
 // ============================================================================
