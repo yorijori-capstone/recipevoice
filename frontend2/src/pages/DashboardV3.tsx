@@ -81,7 +81,7 @@ export function DashboardV3() {
 
     try {
       const response = await fetch(
-        `${API_BASE_URL}/api/recipes/search/rag?q=${encodeURIComponent(searchQuery.trim())}&top_k=10`
+        `${API_BASE_URL}/api/recipes/search/cleaned?q=${encodeURIComponent(searchQuery.trim())}`
       );
       const data = await response.json();
 
@@ -100,7 +100,7 @@ export function DashboardV3() {
 
         setSearchResults(mappedResults);
         setHasSearchResults(data.hasResults);
-        console.log(`[Dashboard] Search results: ${data.count} recipes found`);
+        console.log(`[Dashboard] Search results (제목/재료/레시피): ${data.count} recipes found`);
       }
     } catch (error) {
       console.error('[Dashboard] Search error:', error);

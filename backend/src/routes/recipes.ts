@@ -33,6 +33,72 @@ router.get('/', async (req, res) => {
   }
 });
 
+// 레시피 검색 (cleaned recipes - V3: 제목 + 재료 + 세부 레시피)
+// IMPORTANT: Must be before /:recipeId/cleaned to avoid route conflict
+router.get('/search/cleaned', async (req, res) => {
+  try {
+    const query = req.query.q as string;
+
+    if (!query) {
+      return res.status(400).json({ error: 'Query parameter required' });
+    }
+
+    console.log(`[Recipe Search] Searching cleaned recipes for: "${query}"`);
+
+    // Search in title, difficulty, cook_time, ingredients, and recipe steps using subqueries for better performance
+    const result = await pool.query(
+      `SELECT cr.id, cr.recipe_id, cr.title, cr.opening_remark,
+              r.difficulty, r.cook_time, r.servings,
+              (SELECT COUNT(*) FROM cleaned_steps WHERE cleaned_recipe_id = cr.id) as total_steps,
+              CASE
+                WHEN cr.title ILIKE $1 THEN 1
+                WHEN r.difficulty ILIKE $1 THEN 2
+                WHEN r.cook_time ILIKE $1 THEN 3
+                WHEN EXISTS (SELECT 1 FROM ingredients i WHERE i.recipe_id = cr.recipe_id AND i.name ILIKE $1) THEN 4
+                WHEN EXISTS (SELECT 1 FROM cleaned_steps cs WHERE cs.cleaned_recipe_id = cr.id AND cs.script ILIKE $1) THEN 5
+                ELSE 6
+              END as match_priority
+       FROM cleaned_recipes cr
+       LEFT JOIN recipes r ON cr.recipe_id = r.recipe_id
+       WHERE cr.title ILIKE $1
+          OR r.difficulty ILIKE $1
+          OR r.cook_time ILIKE $1
+          OR EXISTS (SELECT 1 FROM ingredients i WHERE i.recipe_id = cr.recipe_id AND i.name ILIKE $1)
+          OR EXISTS (SELECT 1 FROM cleaned_steps cs WHERE cs.cleaned_recipe_id = cr.id AND cs.script ILIKE $1)
+       ORDER BY match_priority, cr.created_at DESC
+       LIMIT 20`,
+      [`%${query}%`]
+    );
+
+    const recipes = result.rows.map((row) => ({
+      id: row.id,
+      recipeId: row.recipe_id,
+      title: row.title,
+      openingRemark: row.opening_remark,
+      difficulty: row.difficulty,
+      cookTime: row.cook_time,
+      servings: row.servings,
+      totalSteps: row.total_steps,
+    }));
+
+    console.log(`[Recipe Search] Found ${recipes.length} cleaned recipes`);
+
+    res.json({
+      success: true,
+      query,
+      count: recipes.length,
+      hasResults: recipes.length > 0,
+      recipes,
+    });
+  } catch (error) {
+    console.error('[Recipe Search] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to search recipes'
+    });
+  }
+});
+
 // 레시피 상세 (cleaned recipe)
 router.get('/:recipeId/cleaned', async (req, res) => {
   try {
@@ -170,59 +236,6 @@ router.get('/search/query', async (req, res) => {
   } catch (error) {
     console.error('Error searching recipes:', error);
     res.status(500).json({ error: 'Failed to search recipes' });
-  }
-});
-
-// 레시피 검색 (cleaned recipes - V3)
-router.get('/search/cleaned', async (req, res) => {
-  try {
-    const query = req.query.q as string;
-
-    if (!query) {
-      return res.status(400).json({ error: 'Query parameter required' });
-    }
-
-    console.log(`[Recipe Search] Searching cleaned recipes for: "${query}"`);
-
-    // Search in cleaned_recipes table
-    const result = await pool.query(
-      `SELECT cr.id, cr.recipe_id, cr.title, cr.opening_remark,
-              r.difficulty, r.cook_time, r.servings,
-              (SELECT COUNT(*) FROM cleaned_steps WHERE cleaned_recipe_id = cr.id) as total_steps
-       FROM cleaned_recipes cr
-       LEFT JOIN recipes r ON cr.recipe_id = r.recipe_id
-       WHERE cr.title ILIKE $1
-       ORDER BY cr.created_at DESC
-       LIMIT 20`,
-      [`%${query}%`]
-    );
-
-    const recipes = result.rows.map((row) => ({
-      id: row.id,
-      recipeId: row.recipe_id,
-      title: row.title,
-      openingRemark: row.opening_remark,
-      difficulty: row.difficulty,
-      cookTime: row.cook_time,
-      servings: row.servings,
-      totalSteps: row.total_steps,
-    }));
-
-    console.log(`[Recipe Search] Found ${recipes.length} cleaned recipes`);
-
-    res.json({
-      success: true,
-      query,
-      count: recipes.length,
-      hasResults: recipes.length > 0,
-      recipes,
-    });
-  } catch (error) {
-    console.error('[Recipe Search] Error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to search recipes'
-    });
   }
 });
 
