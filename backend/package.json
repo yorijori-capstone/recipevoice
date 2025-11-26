@@ -8,17 +8,20 @@
     "start": "node dist/serverV3.js",
     "import": "tsx scripts/import-recipes.ts",
     "db:init": "psql -U postgres -f scripts/init-db.sql",
-    "clean:all": "tsx scripts/batch-clean-recipes.ts"
+    "clean:all": "tsx scripts/batch-clean-recipes.ts",
+    "youtube:mcp": "tsx scripts/run-youtube-mcp.ts"
   },
+  "postinstall": "node scripts/patch-mcp-sdk.js",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@modelcontextprotocol/sdk": "1.0.4",
     "axios": "^1.13.2",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.18.2",
     "openai": "^6.9.1",
     "pg": "^8.11.3",
-    "ws": "^8.16.0"
+    "ws": "^8.16.0",
+    "zubeid-youtube-mcp-server": "^1.0.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
@@ -28,5 +31,11 @@
     "@types/ws": "^8.5.10",
     "tsx": "^4.7.1",
     "typescript": "^5.3.3"
+  },
+  "overrides": {
+    "@modelcontextprotocol/sdk": "1.0.4",
+    "zubeid-youtube-mcp-server": {
+      "@modelcontextprotocol/sdk": "1.0.4"
+    }
   }
 }

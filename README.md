@@ -35,6 +35,31 @@ graph LR
 
 ---
 
+## 📺 YouTube 기반 레시피 수집 (MCP)
+
+`zubeid-youtube-mcp-server`를 통해 **검색 → 영상 선택 → 자막 추출 → RecipeCleaner** 까지 한 번에 이어지는 파이프라인을 준비했습니다.
+
+1. **환경 변수 설정 (`backend/.env`)**
+   ```env
+   YOUTUBE_API_KEY=AIza...
+   YOUTUBE_TRANSCRIPT_LANG=ko
+   ```
+2. **MCP 서버 실행**
+   ```bash
+   cd backend
+   npm install
+   npm run youtube:mcp
+   ```
+3. **백엔드 연동 흐름**
+   - `GET /api/youtube/search?query=김치찌개&limit=5` → MCP `videos.searchVideos`
+   - `POST /api/youtube/import` (body: `videoId`, `language=ko`, `searchQuery`) → MCP `videos.getVideo` + `transcripts.getTranscript`
+   - `recipe_id = recipe_yt_<videoId>` 규칙으로 `recipes.raw_data` 저장 후 `RecipeCleaner.cleanAndPlanRecipe` 실행
+   - raw 데이터에는 `title`, `description`, `channelTitle`, `duration`, `thumbnails URL`, `transcript`, `statistics`, `searchQuery`, `retrievedAt`, `source` 등을 JSON 으로 유지
+
+자세한 명세는 [`docs/youtube-mcp-search-pipeline.md`](docs/youtube-mcp-search-pipeline.md)를 참고하세요.
+
+---
+
 ## 🚀 시작하기
 
 ### 개발자 가이드

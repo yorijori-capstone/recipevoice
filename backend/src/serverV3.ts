@@ -8,6 +8,7 @@ import dotenv from 'dotenv';
 import cors from 'cors';
 import recipeRoutes from './routes/recipes.js';
 import cookingV3Routes, { getCookingServiceV3 } from './routes/cookingV3.js';
+import youtubeRoutes from './routes/youtube.js';
 
 dotenv.config();
 
@@ -22,6 +23,9 @@ app.get('/health', (req, res) => {
 
 // Recipe API routes
 app.use('/api/recipes', recipeRoutes);
+
+// YouTube ingestion routes
+app.use('/api/youtube', youtubeRoutes);
 
 // Cooking mode API routes (V3: MCP Tool Calling)
 app.use('/api/cooking/v2', cookingV3Routes);
