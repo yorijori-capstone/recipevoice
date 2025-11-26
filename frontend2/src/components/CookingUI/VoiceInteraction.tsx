@@ -296,7 +296,7 @@ export const VoiceInteraction = forwardRef<VoiceInteractionRef, VoiceInteraction
         {/* Auto Mode Status */}
         {voiceMode === 'auto' && (
           <div className="text-center">
-            <div className="text-primary">
+            <div style={{ color: 'var(--color-primary)' }}>
               <i className="bi bi-mic-fill fs-1"></i>
             </div>
             <div className="text-muted mt-2">
