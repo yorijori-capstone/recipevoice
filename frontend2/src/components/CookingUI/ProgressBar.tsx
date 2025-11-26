@@ -84,7 +84,15 @@ export function ProgressBar({ currentStep, totalSteps, status }: ProgressBarProp
 
         {/* Step Indicators */}
         <div className="mt-3">
-          <div className="d-flex justify-content-between">
+          <div 
+            className="d-flex"
+            style={{ 
+              overflowX: 'auto',
+              overflowY: 'hidden',
+              paddingBottom: '5px',
+              scrollbarWidth: 'thin'
+            }}
+          >
             {Array.from({ length: totalSteps }, (_, index) => {
               const stepNumber = index + 1;
               const isCompleted = stepNumber < currentStep;
@@ -94,7 +102,11 @@ export function ProgressBar({ currentStep, totalSteps, status }: ProgressBarProp
                 <div
                   key={stepNumber}
                   className="d-flex flex-column align-items-center"
-                  style={{ flex: 1 }}
+                  style={{ 
+                    flex: '0 0 auto',
+                    minWidth: '40px',
+                    marginRight: '8px'
+                  }}
                 >
                   <div
                     className={`rounded-circle d-flex align-items-center justify-content-center ${isCompleted

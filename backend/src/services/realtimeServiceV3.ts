@@ -309,7 +309,7 @@ IMPORTANT:
       });
 
       this.ws.on('open', () => {
-        console.log('✅ Connected to OpenAI Realtime API (V2)');
+        console.log('✅ Connected to OpenAI Realtime API (V3)');
         this.sendSessionUpdate();
         resolve();
       });

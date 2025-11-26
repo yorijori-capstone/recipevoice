@@ -173,7 +173,7 @@ export function RecipeGenerateModal({ onClose, onRecipeGenerated, initialPrompt 
                     <div className="alert alert-success" style={{ backgroundColor: 'rgba(255, 107, 53, 0.1)', borderColor: 'rgba(255, 107, 53, 0.2)', color: 'var(--color-primary-dark)' }}>
                       <h6 className="alert-heading">ℹ️ AI 레시피 생성 안내</h6>
                       <ul className="mb-0 small">
-                        <li>Recipe Creator가 한국 요리 레시피를 자동으로 생성합니다</li>
+                        <li>RecipeCreator가 레시피를 자동으로 생성합니다</li>
                         <li>재료, 조리 단계, 팁까지 모두 포함됩니다</li>
                         <li>생성 후 바로 음성 가이드 요리를 시작할 수 있습니다</li>
                       </ul>

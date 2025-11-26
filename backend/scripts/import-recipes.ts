@@ -16,7 +16,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { pool } from '../src/db/pool.js';
-import { CleanedRecipeService } from '../src/services/cleanedRecipeService.js';
+import { RecipeCleaner } from '../src/services/recipeCleaner.js';
 
 // Get current directory (ESM compatible)
 const __filename = fileURLToPath(import.meta.url);
@@ -280,7 +280,7 @@ async function ensureCleanTransaction(client: any): Promise<void> {
 async function importRecipe(
   recipe: RecipeJSON,
   client: any,
-  cleanedRecipeService: CleanedRecipeService
+  recipeCleaner: RecipeCleaner
 ): Promise<{ success: boolean; recipeId: string | null; error?: string }> {
   const recipeId = getRecipeId(recipe);
   if (!recipeId) {
@@ -331,7 +331,7 @@ async function importRecipe(
     // Step 2: Clean and plan recipe (if not skipped)
     if (!SKIP_CLEANING) {
       try {
-        await cleanedRecipeService.cleanAndPlanRecipe(recipeId);
+        await recipeCleaner.cleanAndPlanRecipe(recipeId);
         console.log(`  ✅ Recipe cleaned: ${recipeId}`);
       } catch (cleanError: any) {
         console.error(`  ⚠️  Cleaning failed for ${recipeId}:`, cleanError.message);
@@ -365,8 +365,8 @@ async function main() {
   }
 
   // Initialize services
-  const cleanedRecipeService = apiKey 
-    ? new CleanedRecipeService(apiKey)
+  const recipeCleaner = apiKey 
+    ? new RecipeCleaner(apiKey)
     : null;
 
   // Check raw data directory
@@ -442,7 +442,7 @@ async function main() {
           continue;
         }
 
-        const result = await importRecipe(recipe, client, cleanedRecipeService!);
+        const result = await importRecipe(recipe, client, recipeCleaner!);
         
         if (result.success) {
           results.success++;

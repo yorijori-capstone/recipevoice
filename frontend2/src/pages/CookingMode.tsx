@@ -499,7 +499,7 @@ export function CookingMode() {
 
 
 
-      {/* Planning Result Modal - V2에서는 cleaned_recipes에 저장되어 있음 */}
+      {/* Planning Result Modal - V3에서는 cleaned_recipes에 저장되어 있음 */}
       {
         showPlanModal && (
           <div className="modal show d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
@@ -515,7 +515,7 @@ export function CookingMode() {
                 </div>
                 <div className="modal-body">
                   <p className="text-muted">
-                    이 레시피는 V2 아키텍처를 사용하여 미리 계획되었습니다.
+                    이 레시피는 V3 아키텍처(MCP Tool Calling)를 사용하여 미리 계획되었습니다.
                   </p>
                   <ul>
                     <li>총 단계: {session.totalSteps}개</li>

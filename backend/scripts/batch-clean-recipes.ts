@@ -5,7 +5,7 @@
 
 import dotenv from 'dotenv';
 import { pool } from '../src/db/pool.js';
-import { CleanedRecipeService } from '../src/services/cleanedRecipeService.js';
+import { RecipeCleaner } from '../src/services/recipeCleaner.js';
 
 dotenv.config();
 
@@ -31,7 +31,7 @@ async function getAllRecipeIds(): Promise<string[]> {
 }
 
 async function cleanRecipeWithRetry(
-  service: CleanedRecipeService,
+  service: RecipeCleaner,
   recipeId: string,
   attempt = 1
 ): Promise<{ success: boolean; error?: string }> {
@@ -70,7 +70,7 @@ async function main() {
     process.exit(1);
   }
 
-  const cleanedRecipeService = new CleanedRecipeService(apiKey);
+  const recipeCleaner = new RecipeCleaner(apiKey);
 
   try {
     // Get all recipe IDs
@@ -102,7 +102,7 @@ async function main() {
       console.log(`${progress} Processing: ${recipeId}`);
 
       // Check if already cleaned
-      const alreadyCleaned = await cleanedRecipeService.isRecipeCleaned(recipeId);
+      const alreadyCleaned = await recipeCleaner.isRecipeCleaned(recipeId);
 
       if (alreadyCleaned) {
         console.log(`  ⏭️  Already cleaned - skipping\n`);
@@ -112,7 +112,7 @@ async function main() {
 
       // Clean recipe with retry
       const cleanStart = Date.now();
-      const result = await cleanRecipeWithRetry(cleanedRecipeService, recipeId);
+      const result = await cleanRecipeWithRetry(recipeCleaner, recipeId);
       const cleanDuration = ((Date.now() - cleanStart) / 1000).toFixed(2);
 
       if (result.success) {
