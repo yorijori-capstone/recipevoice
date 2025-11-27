@@ -9,6 +9,7 @@ interface VoiceInteractionProps {
   onCommandDetected?: (command: string) => void;
   onStepAutoChanged?: (data: any) => void;  // V3: Auto step change from MCP Tool
   onSessionStateUpdated?: (data: any) => void;  // V3: Session state sync
+  onTimerReset?: (data: { stepIndex: number; reason: string }) => void;  // V3: Timer reset
 }
 
 export interface VoiceInteractionRef {
@@ -28,6 +29,7 @@ export const VoiceInteraction = forwardRef<VoiceInteractionRef, VoiceInteraction
   onCommandDetected,
   onStepAutoChanged,
   onSessionStateUpdated,
+  onTimerReset,
 }, ref) => {
   const [voiceMode, setVoiceMode] = useState<'none' | 'auto'>('none');
   const [transcripts, setTranscripts] = useState<Array<{ role: 'user' | 'assistant'; text: string; timestamp: Date }>>([]);
@@ -120,6 +122,10 @@ export const VoiceInteraction = forwardRef<VoiceInteractionRef, VoiceInteraction
       console.log('📊 [VoiceInteraction] Session state updated:', data);
       onSessionStateUpdated?.(data);
     },
+    onTimerReset: (data) => {
+      console.log('⏱️ [VoiceInteraction] Timer reset:', data);
+      onTimerReset?.(data);
+    },
   });
 
   // Audio recorder hook
@@ -152,7 +158,7 @@ export const VoiceInteraction = forwardRef<VoiceInteractionRef, VoiceInteraction
     }
   }), [sendTextMessage, sendTimerState]);
 
-  // Connect on mount with sessionId (only once)
+  // Connect on mount with sessionId
   useEffect(() => {
     console.log(`🔌 [VoiceInteraction] Mounting component with sessionId: ${sessionId}`);
     connect(sessionId);
@@ -164,7 +170,7 @@ export const VoiceInteraction = forwardRef<VoiceInteractionRef, VoiceInteraction
         stopStreaming();
       }
     };
-  }, []); // Empty dependency array - only run once on mount
+  }, []); // 원래대로 빈 의존성 배열
 
   // Update VAD mode when voice mode changes
   useEffect(() => {
@@ -186,7 +192,7 @@ export const VoiceInteraction = forwardRef<VoiceInteractionRef, VoiceInteraction
       console.log('⏹️ Voice mode deactivated - stopping streaming');
       stopStreaming();
     }
-  }, [isConnected, voiceMode]);
+  }, [isConnected, voiceMode]); // 원래 의존성
 
   return (
     <div className="card">

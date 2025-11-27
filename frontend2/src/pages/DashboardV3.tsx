@@ -37,7 +37,7 @@ export function DashboardV3() {
     if (!isSearching) {
       fetchAllRecipes();
     }
-  }, [page, isSearching]);
+  }, [page, isSearching]); // fetchAllRecipes는 useCallback으로 감싸지 않았으므로 의존성에서 제외
 
   const fetchAllRecipes = async () => {
     setLoading(true);

@@ -15,6 +15,7 @@ interface UseWebSocketOptions {
   onToolExecuted?: (data: { tool: string; result: any }) => void;
   onStepChanged?: (data: any) => void;
   onSessionStateUpdated?: (data: any) => void;
+  onTimerReset?: (data: { stepIndex: number; reason: string }) => void;
 }
 
 export function useWebSocket(options: UseWebSocketOptions = {}) {
@@ -163,6 +164,13 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
             console.log('📊 [useWebSocket] Session state updated:', data);
             if (options.onSessionStateUpdated) {
               options.onSessionStateUpdated(data);
+            }
+            break;
+
+          case 'timer_reset':
+            console.log('⏱️ [useWebSocket] Timer reset:', data);
+            if (options.onTimerReset) {
+              options.onTimerReset(data);
             }
             break;
         }
