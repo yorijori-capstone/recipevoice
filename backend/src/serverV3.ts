@@ -219,6 +219,21 @@ wss.on('connection', (ws: WebSocket) => {
         }
       });
 
+      // 🆕 Timer reset event (step change)
+      realtimeService.on('timer_reset', (data: any) => {
+        if (data.sessionId === currentSessionId) {
+          console.log(`[Server V3] Timer reset: step ${data.stepIndex}, reason: ${data.reason}`);
+          ws.send(
+            JSON.stringify({
+              type: 'timer_reset',
+              sessionId: data.sessionId,
+              stepIndex: data.stepIndex,
+              reason: data.reason,
+            })
+          );
+        }
+      });
+
       // Session ended
       agent.on('session_ended', (data: any) => {
         if (data.sessionId === currentSessionId) {

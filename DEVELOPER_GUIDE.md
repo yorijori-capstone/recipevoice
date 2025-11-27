@@ -19,7 +19,7 @@
 
 - **Node.js 18+** (필수)
 - **PostgreSQL 14+** (필수)
-- **OpenAI API Key** (필수, `gpt-4o-realtime-preview` 접근 권한 필요)
+- **OpenAI API Key** (필수, `gpt-realtime` 접근 권한 필요)
 - **Git**
 
 ---
@@ -160,7 +160,7 @@ pg_dump -U recipevoice -d recipevoice > db_dumps/recipevoice_backup.sql
 
 ### Q: "OpenAI API Error"
 - API Key가 유효한지, 잔액이 충분한지 확인하세요.
-- `gpt-4o-realtime-preview` 모델 접근 권한이 있는지 확인하세요.
+- `gpt-realtime` 모델 접근 권한이 있는지 확인하세요.
 
 ### Q: "WebSocket connection failed"
 - Backend 서버가 3001 포트에서 실행 중인지 확인하세요.

@@ -437,71 +437,11 @@ router.post('/generate', async (req, res) => {
     // Step 2: Generate unique recipe_id
     const recipeId = `recipe_gen_${Date.now()}`;
 
-    // Step 3: Save PlanningOutput directly to cleaned DB
+    // Step 3: Save PlanningOutput directly to cleaned DB (AI 생성이므로 raw_data 생략)
     console.log(`[Recipe API] Saving recipe to cleaned DB: ${recipeId}`);
-    const cleanedRecipe = await recipeCleaner.saveCleanedRecipe(recipeId, planningOutput);
+    const cleanedRecipe = await recipeCleaner.saveCleanedRecipe(recipeId, planningOutput, true);
 
-    // Step 4: Optionally save to raw recipe database for reference
-    const client = await pool.connect();
-    try {
-      // Save ingredients to raw DB for compatibility
-      const allIngredients = [...planningOutput.ingredients.main, ...planningOutput.ingredients.sub];
-
-      if (allIngredients.length > 0) {
-        await client.query('BEGIN');
-
-        // 기존 재료 삭제 (중복 방지)
-        await client.query('DELETE FROM ingredients WHERE recipe_id = $1', [recipeId]);
-
-        // 새 재료 삽입
-        for (let i = 0; i < allIngredients.length; i++) {
-          const ing = allIngredients[i];
-          
-          // 안전한 데이터 변환 및 null 체크
-          if (!ing.name) {
-            console.warn(`[Recipe API] Skipping ingredient with no name at index ${i}`);
-            continue;
-          }
-          
-          const quantity = ing.amount && ing.unit 
-            ? `${ing.amount}${ing.unit}`.trim()
-            : ing.amount || ing.unit || '';
-          
-          const description = ing.notes || ing.usage || null;
-          const displayOrder = i + 1; // 정수값 보장
-          
-          await client.query(
-            `INSERT INTO ingredients (recipe_id, name, quantity, description, display_order)
-             VALUES ($1, $2, $3, $4, $5)`,
-            [
-              recipeId,
-              ing.name,
-              quantity,
-              description,
-              displayOrder
-            ]
-          );
-        }
-
-        await client.query('COMMIT');
-        console.log(`[Recipe API] Raw recipe ingredients saved: ${recipeId}`);
-      } else {
-        console.log(`[Recipe API] No ingredients to save for ${recipeId}`);
-      }
-    } catch (error: any) {
-      // ROLLBACK 시도 (실패해도 무시)
-      try {
-        await client.query('ROLLBACK');
-      } catch (rollbackError) {
-        // 이미 롤백되었거나 트랜잭션이 없는 경우 무시
-      }
-      console.error('[Recipe API] Failed to save raw recipe ingredients (non-critical):', error);
-      // Don't throw - cleaned recipe is already saved
-    } finally {
-      client.release();
-    }
-
-    // Step 5: Return result (ready for immediate use in session)
+    // Step 4: Return result (ready for immediate use in session)
     res.json({
       success: true,
       recipe_id: recipeId,

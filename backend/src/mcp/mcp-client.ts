@@ -52,7 +52,10 @@ export class MCPClientManager {
     const serverPath = isDev
       ? path.join(__dirname, 'navigation-server.ts')
       : path.join(__dirname, 'navigation-server.js');
-    const command = isDev ? 'npx' : 'node';
+    
+    // Windows compatibility: use .cmd extension for npx
+    const isWindows = process.platform === 'win32';
+    const command = isDev ? (isWindows ? 'npx.cmd' : 'npx') : 'node';
     const args = isDev ? ['tsx', serverPath] : [serverPath];
 
     this.navigationProcess = spawn(command, args, {
@@ -96,7 +99,10 @@ export class MCPClientManager {
     const serverPath = isDev
       ? path.join(__dirname, 'timer-server.ts')
       : path.join(__dirname, 'timer-server.js');
-    const command = isDev ? 'npx' : 'node';
+    
+    // Windows compatibility: use .cmd extension for npx
+    const isWindows = process.platform === 'win32';
+    const command = isDev ? (isWindows ? 'npx.cmd' : 'npx') : 'node';
     const args = isDev ? ['tsx', serverPath] : [serverPath];
 
     this.timerProcess = spawn(command, args, {
