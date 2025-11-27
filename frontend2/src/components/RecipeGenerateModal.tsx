@@ -158,7 +158,7 @@ export function RecipeGenerateModal({ onClose, onRecipeGenerated, initialPrompt 
                   {/* Loading State */}
                   {loading && (
                     <div className="text-center py-4">
-                      <div className="spinner-border text-primary mb-3" role="status">
+                      <div className="spinner-border" role="status">
                         <span className="visually-hidden">Loading...</span>
                       </div>
                       <p className="text-muted">
