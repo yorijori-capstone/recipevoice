@@ -30,20 +30,24 @@
 
 ### 1) 데이터베이스 복원
 ```bash
-# DB 생성
-psql -U postgres -c "CREATE DATABASE recipevoice"
-psql -U postgres -c "CREATE USER recipevoice WITH PASSWORD 'recipevoice'"
-psql -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE recipevoice TO recipevoice"
+# DB 생성 (실제 사용 중인 데이터베이스명: yorijori)
+psql -U postgres -c "CREATE DATABASE yorijori"
+psql -U postgres -c "CREATE USER postgres WITH PASSWORD 'postgres'"
+psql -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE yorijori TO postgres"
 
 # 덤프 복원 (SQL 형식 추천)
-psql -U recipevoice -d recipevoice < db_dumps/recipevoice_backup.sql
+psql -U postgres -d yorijori < db_dumps/yorijori_backup.sql
 ```
 
 ### 2) 환경 변수 설정
 `backend/.env`:
 ```env
 OPENAI_API_KEY=sk-your-key
-DATABASE_URL=postgresql://recipevoice:recipevoice@localhost:5432/recipevoice
+DB_NAME=yorijori
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=postgres
 PORT=3001
 ```
 
@@ -89,7 +93,7 @@ npm install
 팀 공유용 덤프 파일(`db_dumps/`)을 사용하여 즉시 환경을 구축합니다.
 ```bash
 # SQL 형식 복원
-psql -U recipevoice -d recipevoice < db_dumps/recipevoice_backup.sql
+psql -U postgres -d yorijori < db_dumps/yorijori_backup.sql
 ```
 
 **방법 B: 처음부터 구축**
@@ -97,13 +101,13 @@ psql -U recipevoice -d recipevoice < db_dumps/recipevoice_backup.sql
 ```bash
 # 1. 스키마 생성
 cd backend
-psql -U recipevoice -d recipevoice -f schema.sql
+psql -U postgres -d yorijori -f scripts/init-db.sql
 
-# 2. 마이그레이션 실행
-psql -U recipevoice -d recipevoice -f migrations/001_create_cleaned_recipes.sql
-psql -U recipevoice -d recipevoice -f migrations/002_create_sessions.sql
-psql -U recipevoice -d recipevoice -f migrations/004_add_raw_data_column.sql
-psql -U recipevoice -d recipevoice -f migrations/005_grant_permissions.sql
+# 2. 마이그레이션 실행 (중요: raw_data 컬럼 추가 필수)
+psql -U postgres -d yorijori -f migrations/001_create_cleaned_recipes.sql
+psql -U postgres -d yorijori -f migrations/002_create_sessions.sql
+psql -U postgres -d yorijori -f migrations/004_add_raw_data_column.sql
+psql -U postgres -d yorijori -f migrations/005_grant_permissions.sql
 
 # 3. 데이터 Import 및 Planning
 npm run import      # 원본 데이터 로드
@@ -144,7 +148,7 @@ npm run build:index  # (스크립트가 설정된 경우) 또는 관련 Python �
 팀원들과 DB를 공유할 때 사용합니다.
 ```bash
 # SQL 형식 (Git 공유용)
-pg_dump -U recipevoice -d recipevoice > db_dumps/recipevoice_backup.sql
+pg_dump -U postgres -d yorijori > db_dumps/yorijori_backup.sql
 ```
 
 ### 마이그레이션
@@ -156,7 +160,26 @@ pg_dump -U recipevoice -d recipevoice > db_dumps/recipevoice_backup.sql
 
 ### Q: "Cannot connect to PostgreSQL"
 - PostgreSQL 서비스가 실행 중인지 확인하세요.
-- `DATABASE_URL` 환경 변수가 올바른지 확인하세요.
+- `.env` 파일의 `DB_NAME`, `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`가 올바른지 확인하세요.
+- 기본값: `DB_NAME=yorijori`, `DB_USER=postgres`, `DB_PASSWORD=postgres`
+
+### Q: "column 'raw_data' of relation 'recipes' does not exist"
+**가장 흔한 오류!** 데이터베이스에 `raw_data` 컬럼이 없을 때 발생합니다.
+
+**해결 방법:**
+```bash
+# 1. .env 파일에서 실제 사용 중인 데이터베이스 이름 확인
+grep DB_NAME backend/.env
+# 출력 예: DB_NAME=yorijori
+
+# 2. 해당 데이터베이스에 raw_data 컬럼 추가
+psql -U postgres -d yorijori -c "ALTER TABLE recipes ADD COLUMN IF NOT EXISTS raw_data JSONB;"
+psql -U postgres -d yorijori -c "CREATE INDEX IF NOT EXISTS idx_recipes_raw_data ON recipes USING GIN (raw_data);"
+
+# 3. 백엔드 서버 재시작
+```
+
+**주의:** 시스템에 여러 데이터베이스가 있을 수 있습니다 (`recipe-db`, `recipe_db`, `yorijori` 등). 반드시 `.env` 파일에 설정된 데이터베이스에 컬럼을 추가해야 합니다!
 
 ### Q: "OpenAI API Error"
 - API Key가 유효한지, 잔액이 충분한지 확인하세요.
