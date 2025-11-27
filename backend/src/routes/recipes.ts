@@ -139,15 +139,18 @@ router.get('/:recipeId', async (req, res) => {
       // cleaned recipe가 있으면 planning_result에서 데이터 추출하여 프론트엔드 형식으로 변환
       const planning = cleanedRecipe.planning_result;
       
-      // recipes 테이블에서 copyright와 source_url 가져오기
+      // recipes 테이블에서 메타 정보 가져오기
       const recipeInfo = await pool.query(
-        'SELECT copyright, source_url FROM recipes WHERE recipe_id = $1',
+        'SELECT copyright, source_url, servings, cook_time, difficulty FROM recipes WHERE recipe_id = $1',
         [recipeId]
       );
-      
+
       const recipeRow = recipeInfo.rows[0];
       let copyright = recipeRow?.copyright || null;
       let sourceUrl = recipeRow?.source_url || null;
+      let servings = recipeRow?.servings || null;
+      let cookTime = recipeRow?.cook_time || null;
+      let difficulty = recipeRow?.difficulty || null;
       
       // 새로 생성한 레시피인지 확인 (recipe_id가 recipe_gen_으로 시작)
       const isGenerated = recipeId.startsWith('recipe_gen_');
@@ -162,45 +165,57 @@ router.get('/:recipeId', async (req, res) => {
       }
       
       // ingredients 변환 (planning_result.ingredients -> 프론트엔드 형식)
-      const allIngredients = [
-        ...planning.ingredients.main.map((ing, idx) => ({
-          id: idx + 1,
-          name: ing.name,
-          quantity: `${ing.amount}${ing.unit}`.trim(),
-          description: ing.notes || null,
-          display_order: idx + 1
-        })),
-        ...planning.ingredients.sub.map((ing, idx) => ({
-          id: planning.ingredients.main.length + idx + 1,
-          name: ing.name,
-          quantity: `${ing.amount}${ing.unit}`.trim(),
-          description: ing.usage || null,
-          display_order: planning.ingredients.main.length + idx + 1
-        }))
-      ];
-      
-      // steps 변환 (planning_result.process -> 프론트엔드 형식)
-      const steps = planning.process.map((step) => ({
-        id: step.step_index,
-        step_number: step.step_index,
-        description: step.description,
-        image_url: null,
-        duration: step.timer_seconds
-      }));
-      
+      const allIngredients = planning.ingredients
+        ? [
+            ...(planning.ingredients.main || []).map((ing, idx) => ({
+              id: idx + 1,
+              name: ing.name,
+              quantity: `${ing.amount}${ing.unit}`.trim(),
+              description: ing.notes || null,
+              display_order: idx + 1
+            })),
+            ...(planning.ingredients.sub || []).map((ing, idx) => ({
+              id: (planning.ingredients.main || []).length + idx + 1,
+              name: ing.name,
+              quantity: `${ing.amount}${ing.unit}`.trim(),
+              description: ing.usage || null,
+              display_order: (planning.ingredients.main || []).length + idx + 1
+            }))
+          ]
+        : cleanedRecipe.ingredients || []; // Use cleaned recipe ingredients as fallback
+
+      // steps 변환: AI 생성 레시피는 process 사용, 기존 레시피는 planned_steps 사용
+      const steps = planning.process
+        ? (planning.process || []).map((step) => ({
+            id: step.step_index,
+            step_number: step.step_index,
+            description: step.description,
+            image_url: null,
+            duration: step.timer_seconds
+          }))
+        : (planning.planned_steps || []).map((step) => ({
+            id: step.order,
+            step_number: step.order,
+            description: step.script,
+            image_url: null,
+            duration: step.estimated_time_sec
+          }));
+
       // tips 추출 (process에서 tip이 있는 것들)
       const tips = planning.process
-        .filter(step => step.tip && step.tip.trim())
-        .map(step => step.tip!);
+        ? (planning.process || [])
+            .filter(step => step.tip && step.tip.trim())
+            .map(step => step.tip!)
+        : [];
       
       // 프론트엔드가 기대하는 형식으로 반환
       return res.json({
         id: cleanedRecipe.id,
         recipe_id: cleanedRecipe.recipe_id,
-        title: planning.meta.title,
-        servings: `${planning.meta.servings}인분`,
-        cook_time: `${planning.meta.time_estimate}분`,
-        difficulty: planning.meta.difficulty,
+        title: planning.meta ? planning.meta.title : planning.title,
+        servings: planning.meta ? `${planning.meta.servings}인분` : (servings || '알 수 없음'),
+        cook_time: planning.meta ? `${planning.meta.time_estimate}분` : (cookTime || '알 수 없음'),
+        difficulty: planning.meta ? planning.meta.difficulty : (difficulty || '보통'),
         source_url: sourceUrl || null,  // cleaned data의 url, 없으면 raw data에서 가져옴
         copyright: copyright,  // "Recipe by <작성자>" 형식
         tips: tips,
@@ -437,11 +452,71 @@ router.post('/generate', async (req, res) => {
     // Step 2: Generate unique recipe_id
     const recipeId = `recipe_gen_${Date.now()}`;
 
-    // Step 3: Save PlanningOutput directly to cleaned DB (AI 생성이므로 raw_data 생략)
+    // Step 3: Save PlanningOutput directly to cleaned DB
     console.log(`[Recipe API] Saving recipe to cleaned DB: ${recipeId}`);
-    const cleanedRecipe = await recipeCleaner.saveCleanedRecipe(recipeId, planningOutput, true);
+    const cleanedRecipe = await recipeCleaner.saveCleanedRecipe(recipeId, planningOutput);
 
-    // Step 4: Return result (ready for immediate use in session)
+    // Step 4: Optionally save to raw recipe database for reference
+    const client = await pool.connect();
+    try {
+      // Save ingredients to raw DB for compatibility
+      const allIngredients = [...planningOutput.ingredients.main, ...planningOutput.ingredients.sub];
+
+      if (allIngredients.length > 0) {
+        await client.query('BEGIN');
+
+        // 기존 재료 삭제 (중복 방지)
+        await client.query('DELETE FROM ingredients WHERE recipe_id = $1', [recipeId]);
+
+        // 새 재료 삽입
+        for (let i = 0; i < allIngredients.length; i++) {
+          const ing = allIngredients[i];
+          
+          // 안전한 데이터 변환 및 null 체크
+          if (!ing.name) {
+            console.warn(`[Recipe API] Skipping ingredient with no name at index ${i}`);
+            continue;
+          }
+          
+          const quantity = ing.amount && ing.unit 
+            ? `${ing.amount}${ing.unit}`.trim()
+            : ing.amount || ing.unit || '';
+          
+          const description = ing.notes || ing.usage || null;
+          const displayOrder = i + 1; // 정수값 보장
+          
+          await client.query(
+            `INSERT INTO ingredients (recipe_id, name, quantity, description, display_order)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [
+              recipeId,
+              ing.name,
+              quantity,
+              description,
+              displayOrder
+            ]
+          );
+        }
+
+        await client.query('COMMIT');
+        console.log(`[Recipe API] Raw recipe ingredients saved: ${recipeId}`);
+      } else {
+        console.log(`[Recipe API] No ingredients to save for ${recipeId}`);
+      }
+    } catch (error: any) {
+      // ROLLBACK 시도 (실패해도 무시)
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackError) {
+        // 이미 롤백되었거나 트랜잭션이 없는 경우 무시
+      }
+      console.error('[Recipe API] Failed to save raw recipe ingredients (non-critical):', error);
+      // Don't throw - cleaned recipe is already saved
+    } finally {
+      client.release();
+    }
+
+    // Step 5: Return result (ready for immediate use in session)
     res.json({
       success: true,
       recipe_id: recipeId,
