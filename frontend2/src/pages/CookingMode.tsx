@@ -202,7 +202,7 @@ export function CookingMode() {
   // V3: Handle timer reset from Server
   const handleTimerReset = (data: { stepIndex: number; reason: string }) => {
     console.log('[CookingMode] Timer reset:', data);
-    
+
     // Force reset timer when step changes
     if (timerRef.current) {
       console.log('[CookingMode] Forcing timer reset due to step change');
@@ -214,7 +214,7 @@ export function CookingMode() {
   if (loading && !session) {
     return (
       <div className="container mt-5 text-center">
-        <div className="spinner-border text-primary" role="status" style={{ width: '3rem', height: '3rem' }}>
+        <div className="spinner-border" role="status" style={{ width: '3rem', height: '3rem' }}>
           <span className="visually-hidden">Loading...</span>
         </div>
         <p className="mt-3 text-muted">요리 세션을 준비하는 중...</p>
@@ -314,29 +314,6 @@ export function CookingMode() {
               AI 요리 가이드
             </h5>
             <p className="mb-3">{session.openingRemark}</p>
-
-            {/* Help Tips moved here */}
-            {viewingStep && (
-              <details>
-                <summary className="text-muted" style={{ cursor: 'pointer' }}>
-                  💡 추가 도움말 보기
-                </summary>
-                <div className="mt-3 p-3 bg-light rounded">
-                  <div className="mb-2">
-                    <strong>다시 듣고 싶을 때:</strong>
-                    <p className="mb-0 text-muted">{viewingStep.retry_script}</p>
-                  </div>
-                  <div className="mb-2">
-                    <strong>이해가 어려울 때:</strong>
-                    <p className="mb-0 text-muted">{viewingStep.fallback_script}</p>
-                  </div>
-                  <div>
-                    <strong>잠시 멈출 때:</strong>
-                    <p className="mb-0 text-muted">{viewingStep.pause_hint}</p>
-                  </div>
-                </div>
-              </details>
-            )}
 
             <button
               type="button"
