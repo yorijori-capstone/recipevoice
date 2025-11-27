@@ -71,9 +71,9 @@ export function CookingMode() {
     return () => {
       endSession();
     };
-  }, [recipeId]);
+  }, [recipeId]); // 원래대로 recipeId만 의존성
 
-  // UI 확인용 (버튼 클릭) - viewingStepIndex만 이동
+  // UI 버튼 클릭 - 로컬 상태만 변경 (원래 방식)
   const handleNext = () => {
     navigateNext();
   };
@@ -182,7 +182,7 @@ export function CookingMode() {
       console.log(`✨ Auto-moved to step: ${data.current_step_index + 1}`);
       updateSessionState({
         currentStepIndex: data.current_step_index,
-        viewingStepIndex: data.current_step_index,
+        viewingStepIndex: data.current_step_index, // 항상 동일하게 유지
       });
     }
   };
@@ -194,9 +194,20 @@ export function CookingMode() {
     // Update local session state from WebSocket event
     updateSessionState({
       currentStepIndex: data.currentStepIndex,
-      viewingStepIndex: data.viewingStepIndex,
+      viewingStepIndex: data.viewingStepIndex, // 별도 관리
       status: data.status,
     });
+  };
+
+  // V3: Handle timer reset from Server
+  const handleTimerReset = (data: { stepIndex: number; reason: string }) => {
+    console.log('[CookingMode] Timer reset:', data);
+    
+    // Force reset timer when step changes
+    if (timerRef.current) {
+      console.log('[CookingMode] Forcing timer reset due to step change');
+      timerRef.current.resetTimer();
+    }
   };
 
   // Loading state
@@ -349,6 +360,7 @@ export function CookingMode() {
             onCommandDetected={handleVoiceCommand}
             onStepAutoChanged={handleStepAutoChanged}
             onSessionStateUpdated={handleSessionStateUpdated}
+            onTimerReset={handleTimerReset}
           />
         </div>
       )}

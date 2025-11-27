@@ -82,12 +82,32 @@ You must strictly follow this JSON structure (same as RecipeCleaner):
       "ingredients_needed": ["String (이 단계에 쓰이는 재료명, 한국어)"] - MUST be array, use [] if empty,
       "tools_needed": ["String (이 단계에 쓰이는 도구명, 한국어)"] - MUST be array, use [] if empty,
       "heat_level": "String - MUST be exactly: High, Medium, Low, Off (capitalized) or null",
-      "timer_seconds": Integer (추정 소요 시간(초), 불확실하면 null - 숫자 또는 null, 문자열 금지),
+      "timer_seconds": Integer (정확한 시간 측정이 필요한 경우에만 설정, 대부분은 null - 숫자 또는 null, 문자열 금지),
       "tip": "String (주의사항이나 꿀팁, 한국어, 선택사항)"
     }
   ]
 }
 \`\`\`
+
+## Timer Usage Guidelines (CRITICAL)
+
+**ONLY set timer_seconds when PRECISE timing is essential for cooking success:**
+
+✅ **타이머 필요한 경우 (Set timer_seconds):**
+- 끓이기/삶기: 물 끓이기, 면 삶기, 달걀 삶기 등 정확한 시간이 중요
+- 굽기/튀기기: 오븐 굽기, 튀김 시간 등 타이밍이 결과에 직접 영향
+- 찜/조림: 정해진 시간 동안 찜하거나 조리는 경우
+- 발효/숙성: 반죽 발효, 양념 숙성 등 시간이 중요한 과정
+- 예열: 오븐 예열, 팬 달구기 등
+
+❌ **타이머 불필요한 경우 (Set timer_seconds to null):**
+- 재료 손질: 썰기, 다지기, 씻기, 껍질 벗기기
+- 간단한 조리: 볶기, 무치기, 버무리기, 간 맞추기
+- 준비 작업: 재료 준비, 도구 준비, 그릇에 담기
+- 마무리 작업: 플레이팅, 고명 올리기, 서빙
+- 상태 확인: 익었는지 확인, 간 보기, 색깔 확인
+
+**핵심 원칙**: 사용자가 시계를 보며 정확히 시간을 재야 하는 경우에만 timer_seconds 설정!
 
 ## STRICT JSON FORMATTING RULES (MUST FOLLOW EXACTLY)
 
@@ -98,6 +118,7 @@ You must strictly follow this JSON structure (same as RecipeCleaner):
 5. **All numbers**: MUST be numbers, not strings (e.g., 2 not "2")
 6. **All arrays**: MUST be arrays, not null (use [] for empty arrays)
 7. **step_index**: MUST start from 1 and increment sequentially (1, 2, 3, ...)
+8. **timer_seconds**: ONLY set when precise timing is critical, otherwise use null
 
 Output Format: Respond ONLY with valid JSON. No other explanations needed.`;
 
@@ -235,7 +256,8 @@ IMPORTANT:
 - Numbers must be numbers, not strings
 - step_index must start from 1 and increment sequentially
 - Use appropriate action_type (lowercase) and phase (lowercase) values
-- Infer tools, heat levels, and timers based on cooking methods`;
+- Infer tools, heat levels, and timers based on cooking methods
+- **CRITICAL**: Only set timer_seconds when precise timing is essential (boiling, baking, etc.). For general tasks like cutting, mixing, seasoning, set timer_seconds to null`;
   }
 
   /**

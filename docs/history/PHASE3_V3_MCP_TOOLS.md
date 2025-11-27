@@ -360,7 +360,7 @@ export class CookingServiceV2 {
       cookingAgent: this.cookingAgent,
       langChainAgent: this.langChainAgent,
       mcpClient: this.mcpClient || undefined,  // 🆕
-      model: 'gpt-4o-realtime-preview-2024-10-01',
+      model: 'gpt-realtime-2024-10-01',
       voice: 'alloy',
     });
   }

@@ -706,6 +706,13 @@ IMPORTANT:
           // 🆕 Reset timer state on step change
           this.timerState = null;
 
+          // 🆕 Emit timer reset event for frontend synchronization
+          this.emit('timer_reset', {
+            sessionId: this.currentSessionId,
+            stepIndex: result.current_step_index,
+            reason: 'step_changed'
+          });
+
           const updatedPrompt = this.generateSystemPrompt(session);
           await this.sendSessionUpdate(updatedPrompt);
         }
