@@ -365,9 +365,9 @@ export function CookingMode() {
         </div>
       )}
 
-      {/* Progress Bar - 음성 상호작용 기준 실제 진행 단계 */}
+      {/* Progress Bar - UI 보기 기준 단계 */}
       <ProgressBar
-        currentStep={session.currentStepIndex + 1}
+        currentStep={session.viewingStepIndex + 1}
         totalSteps={session.totalSteps}
         status={session.status}
       />
