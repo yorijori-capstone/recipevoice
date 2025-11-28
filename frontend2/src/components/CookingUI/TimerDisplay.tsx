@@ -209,7 +209,10 @@ export const TimerDisplay = forwardRef<TimerDisplayRef, TimerDisplayProps>(({
           {!isRunning ? (
             <button
               className="btn btn-primary flex-grow-1"
-              onClick={() => setIsRunning(true)}
+              onClick={() => {
+                setIsRunning(true);
+                onTimerStart?.();
+              }}
               disabled={remainingTime === 0}
             >
               <i className="bi bi-play-fill me-2"></i>
