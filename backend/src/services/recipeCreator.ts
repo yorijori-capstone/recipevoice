@@ -10,6 +10,23 @@ import { PlanningOutput } from './recipeCleaner.js';
 // Interfaces
 // ============================================================================
 
+export interface GeneratedRecipe {
+  title: string;
+  servings: string;
+  cook_time: string;
+  difficulty: 'easy' | 'medium' | 'hard';
+  ingredients: Array<{
+    name: string;
+    quantity: string;
+    description?: string;
+  }>;
+  steps: Array<{
+    order: number;
+    description: string;
+  }>;
+  tips?: string[];
+}
+
 export interface RecipeRecommendation {
   title: string;
   reason: string;
@@ -165,12 +182,22 @@ export class RecipeCreator {
           { role: 'system', content: GENERATION_SYSTEM_PROMPT },
           { role: 'user', content: prompt }
         ],
-        max_completion_tokens: 128000,
+        reasoning_effort: 'low',  // Reduce reasoning tokens: low/medium/high
+        max_completion_tokens: 4096,
         response_format: { type: 'json_object' }
+      });
+
+      console.log('[RecipeCreator] Response received:', {
+        finish_reason: response.choices[0].finish_reason,
+        has_content: !!response.choices[0].message.content
       });
 
       const content = response.choices[0].message.content;
       if (!content) {
+        console.error('[RecipeCreator] Empty response details:', {
+          finish_reason: response.choices[0].finish_reason,
+          response: JSON.stringify(response, null, 2)
+        });
         throw new Error('Empty response from OpenAI');
       }
 
@@ -180,7 +207,7 @@ export class RecipeCreator {
       console.log(`[RecipeCreator] Successfully generated recipe: ${planningOutput.meta.title}`);
       return planningOutput as PlanningOutput;
     } catch (error) {
-      console.error('[RecipeCreator] Recipe generation failed:', error);
+      console.error('[RecipeCreator] Recipe generation failed', error);
       throw error;
     }
   }
@@ -200,7 +227,8 @@ export class RecipeCreator {
           { role: 'system', content: RECOMMENDATION_SYSTEM_PROMPT },
           { role: 'user', content: prompt }
         ],
-        max_completion_tokens: 1024,
+        reasoning_effort: 'low',
+        max_completion_tokens: 2048,
         response_format: { type: 'json_object' }
       });
 

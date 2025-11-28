@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { RecipeCard } from '../components/RecipeCard';
 import { RecipeGenerateModal } from '../components/RecipeGenerateModal';
 
@@ -20,7 +20,6 @@ interface Recipe {
 
 export function DashboardV3() {
   const navigate = useNavigate();
-  const location = useLocation();
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
@@ -32,14 +31,6 @@ export function DashboardV3() {
   const [hasSearchResults, setHasSearchResults] = useState(true);
   const [initialPrompt, setInitialPrompt] = useState('');
   const limit = 24;
-
-  // Clear search when navigating to Dashboard (e.g., clicking '레시피 목록')
-  useEffect(() => {
-    // Clear search state when location changes to root
-    if (location.pathname === '/' && location.state?.clearSearch) {
-      clearSearch();
-    }
-  }, [location]);
 
   // Load all recipes
   useEffect(() => {

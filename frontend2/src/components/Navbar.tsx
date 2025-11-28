@@ -17,11 +17,6 @@ export function Navbar() {
             <Link
               className="nav-link px-2 py-2"
               to="/"
-              state={{ clearSearch: true }}
-              onClick={() => {
-                // Scroll to top when clicking '레시피 목록'
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
               style={{
                 borderRadius: 'var(--radius-md)',
                 transition: 'all var(--transition-base)',
