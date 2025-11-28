@@ -55,6 +55,46 @@ wss.on('connection', (ws: WebSocket) => {
 
   let currentSessionId: string | null = null;
 
+  // ============================================================================
+  // Event Handler References (for cleanup on disconnect)
+  // ============================================================================
+  type EventHandler = (data: any) => void;
+  
+  const eventHandlers: {
+    realtimeService: Map<string, EventHandler>;
+    agent: Map<string, EventHandler>;
+  } = {
+    realtimeService: new Map(),
+    agent: new Map(),
+  };
+
+  // Cleanup function to remove all event listeners
+  const cleanupEventHandlers = async () => {
+    try {
+      const service = await getCookingServiceV3();
+      const realtimeService = service.getRealtimeService();
+      const agent = service.getCookingAgent();
+
+      // Remove RealtimeService listeners
+      eventHandlers.realtimeService.forEach((handler, eventName) => {
+        realtimeService.removeListener(eventName, handler);
+        console.log(`🧹 Removed realtimeService listener: ${eventName}`);
+      });
+      eventHandlers.realtimeService.clear();
+
+      // Remove Agent listeners
+      eventHandlers.agent.forEach((handler, eventName) => {
+        agent.removeListener(eventName, handler);
+        console.log(`🧹 Removed agent listener: ${eventName}`);
+      });
+      eventHandlers.agent.clear();
+
+      console.log('✅ All event handlers cleaned up');
+    } catch (error) {
+      console.error('[Server V3] Error cleaning up event handlers:', error);
+    }
+  };
+
   // Setup event handlers for RealtimeServiceV3
   const setupRealtimeHandlers = async (sessionId: string) => {
     try {
@@ -71,47 +111,55 @@ wss.on('connection', (ws: WebSocket) => {
       }
 
       // User transcription
-      realtimeService.on('user_transcription', (data: any) => {
+      const userTranscriptionHandler: EventHandler = (data) => {
         ws.send(
           JSON.stringify({
             type: 'user_transcription',
             transcript: data.transcript,
           })
         );
-      });
+      };
+      realtimeService.on('user_transcription', userTranscriptionHandler);
+      eventHandlers.realtimeService.set('user_transcription', userTranscriptionHandler);
 
       // Assistant transcript delta
-      realtimeService.on('assistant_transcript_delta', (data: any) => {
+      const assistantDeltaHandler: EventHandler = (data) => {
         ws.send(
           JSON.stringify({
             type: 'assistant_transcript_delta',
             delta: data.delta,
           })
         );
-      });
+      };
+      realtimeService.on('assistant_transcript_delta', assistantDeltaHandler);
+      eventHandlers.realtimeService.set('assistant_transcript_delta', assistantDeltaHandler);
 
       // Assistant transcript done
-      realtimeService.on('assistant_transcript_done', (data: any) => {
+      const assistantDoneHandler: EventHandler = (data) => {
         ws.send(
           JSON.stringify({
             type: 'assistant_transcript_done',
             transcript: data.transcript,
           })
         );
-      });
+      };
+      realtimeService.on('assistant_transcript_done', assistantDoneHandler);
+      eventHandlers.realtimeService.set('assistant_transcript_done', assistantDoneHandler);
 
       // Audio delta (TTS output)
-      realtimeService.on('audio_delta', (chunk: string) => {
+      const audioDeltaHandler: EventHandler = (chunk) => {
         ws.send(
           JSON.stringify({
             type: 'audio_delta',
             audio: chunk,
           })
         );
-      });
+      };
+      realtimeService.on('audio_delta', audioDeltaHandler);
+      eventHandlers.realtimeService.set('audio_delta', audioDeltaHandler);
 
-      // LangChain response (NEW!)
-      realtimeService.on('langchain_response', (data: any) => {
+      // LangChain response
+      const langchainResponseHandler: EventHandler = (data) => {
         console.log('[Server V3] LangChain response:', data);
 
         // Send to frontend
@@ -139,17 +187,21 @@ wss.on('connection', (ws: WebSocket) => {
             );
           }
         }
-      });
+      };
+      realtimeService.on('langchain_response', langchainResponseHandler);
+      eventHandlers.realtimeService.set('langchain_response', langchainResponseHandler);
 
       // Error handling
-      realtimeService.on('error', (error: any) => {
+      const errorHandler: EventHandler = (error) => {
         ws.send(
           JSON.stringify({
             type: 'error',
             error: error.message || 'Unknown error',
           })
         );
-      });
+      };
+      realtimeService.on('error', errorHandler);
+      eventHandlers.realtimeService.set('error', errorHandler);
 
       console.log(`✅ Realtime handlers setup for session: ${sessionId}`);
     } catch (error: any) {
@@ -168,10 +220,10 @@ wss.on('connection', (ws: WebSocket) => {
     try {
       const service = await getCookingServiceV3();
       const agent = service.getCookingAgent();
-      const realtimeService = service.getRealtimeService();  // 🆕 Phase 3
+      const realtimeService = service.getRealtimeService();
 
       // Step changed
-      agent.on('step_changed', (data: any) => {
+      const stepChangedHandler: EventHandler = (data) => {
         if (data.sessionId === currentSessionId) {
           ws.send(
             JSON.stringify({
@@ -182,12 +234,12 @@ wss.on('connection', (ws: WebSocket) => {
             })
           );
         }
-      });
+      };
+      agent.on('step_changed', stepChangedHandler);
+      eventHandlers.agent.set('step_changed', stepChangedHandler);
 
-      // 🆕 Phase 2: voice_mode_changed event removed
-
-      // 🆕 Phase 3: Tool executed (MCP)
-      realtimeService.on('tool_executed', (data: any) => {
+      // Tool executed (MCP)
+      const toolExecutedHandler: EventHandler = (data) => {
         if (data.sessionId === currentSessionId) {
           console.log(`[Server V3] Tool executed: ${data.toolName}`, data.result);
 
@@ -195,7 +247,7 @@ wss.on('connection', (ws: WebSocket) => {
             JSON.stringify({
               type: 'tool_executed',
               sessionId: data.sessionId,
-              tool: data.toolName,  // Frontend expects 'tool', not 'toolName'
+              tool: data.toolName,
               result: data.result,
             })
           );
@@ -217,10 +269,12 @@ wss.on('connection', (ws: WebSocket) => {
             }
           }
         }
-      });
+      };
+      realtimeService.on('tool_executed', toolExecutedHandler);
+      eventHandlers.realtimeService.set('tool_executed', toolExecutedHandler);
 
-      // 🆕 Timer reset event (step change)
-      realtimeService.on('timer_reset', (data: any) => {
+      // Timer reset event (step change)
+      const timerResetHandler: EventHandler = (data) => {
         if (data.sessionId === currentSessionId) {
           console.log(`[Server V3] Timer reset: step ${data.stepIndex}, reason: ${data.reason}`);
           ws.send(
@@ -232,10 +286,12 @@ wss.on('connection', (ws: WebSocket) => {
             })
           );
         }
-      });
+      };
+      realtimeService.on('timer_reset', timerResetHandler);
+      eventHandlers.realtimeService.set('timer_reset', timerResetHandler);
 
       // Session ended
-      agent.on('session_ended', (data: any) => {
+      const sessionEndedHandler: EventHandler = (data) => {
         if (data.sessionId === currentSessionId) {
           ws.send(
             JSON.stringify({
@@ -244,7 +300,9 @@ wss.on('connection', (ws: WebSocket) => {
             })
           );
         }
-      });
+      };
+      agent.on('session_ended', sessionEndedHandler);
+      eventHandlers.agent.set('session_ended', sessionEndedHandler);
 
       console.log(`✅ Agent handlers setup for session: ${sessionId}`);
     } catch (error: any) {
@@ -386,8 +444,12 @@ wss.on('connection', (ws: WebSocket) => {
     }
   });
 
-  ws.on('close', (code, reason) => {
+  ws.on('close', async (code, reason) => {
     console.log(`👋 Client disconnected (code: ${code}, reason: ${reason || 'none'})`);
+    
+    // Cleanup all event handlers to prevent memory leaks
+    await cleanupEventHandlers();
+    
     currentSessionId = null;
   });
 

@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { getApiBaseUrl } from '../utils/api';
+
+const API_BASE_URL = getApiBaseUrl();
 
 interface Ingredient {
   id: number;
@@ -37,7 +40,7 @@ export function RecipeDetail() {
   useEffect(() => {
     const fetchRecipe = async () => {
       try {
-        const response = await fetch(`/api/recipes/${id}`);
+        const response = await fetch(`${API_BASE_URL}/api/recipes/${id}`);
         if (!response.ok) {
           throw new Error('Recipe not found');
         }

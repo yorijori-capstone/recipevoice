@@ -166,11 +166,10 @@ export const VoiceInteraction = forwardRef<VoiceInteractionRef, VoiceInteraction
     return () => {
       console.log('🔌 [VoiceInteraction] Cleanup function called - component unmounting');
       disconnect();
-      if (isStreaming) {
-        stopStreaming();
-      }
+      // Always call stopStreaming to ensure cleanup (avoids stale closure issue)
+      stopStreaming();
     };
-  }, []); // 원래대로 빈 의존성 배열
+  }, []); // Empty dependency array - component uses key prop for remount on sessionId change
 
   // Update VAD mode when voice mode changes
   useEffect(() => {
