@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { RecipeCard } from '../components/RecipeCard';
 import { RecipeGenerateModal } from '../components/RecipeGenerateModal';
@@ -6,6 +6,23 @@ import { RecipeGenerateModal } from '../components/RecipeGenerateModal';
 import { getApiBaseUrl } from '../utils/api';
 
 const API_BASE_URL = getApiBaseUrl();
+
+// Custom debounce hook
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [value, delay]);
+
+  return debouncedValue;
+}
 
 interface Recipe {
   id: number;
@@ -30,7 +47,11 @@ export function DashboardV3() {
   const [searchResults, setSearchResults] = useState<Recipe[]>([]);
   const [hasSearchResults, setHasSearchResults] = useState(true);
   const [initialPrompt, setInitialPrompt] = useState('');
+  const [isRealtimeSearch, setIsRealtimeSearch] = useState(true); // Toggle for realtime search
   const limit = 24;
+
+  // Debounced search query for realtime search
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
 
   // Load all recipes
   useEffect(() => {
@@ -38,6 +59,17 @@ export function DashboardV3() {
       fetchAllRecipes();
     }
   }, [page, isSearching]); // fetchAllRecipes는 useCallback으로 감싸지 않았으므로 의존성에서 제외
+
+  // Realtime search effect
+  useEffect(() => {
+    if (isRealtimeSearch && debouncedSearchQuery.trim()) {
+      performSearch(debouncedSearchQuery);
+    } else if (isRealtimeSearch && !debouncedSearchQuery.trim()) {
+      setIsSearching(false);
+      setSearchResults([]);
+      setHasSearchResults(true);
+    }
+  }, [debouncedSearchQuery, isRealtimeSearch]);
 
   const fetchAllRecipes = async () => {
     setLoading(true);
@@ -65,23 +97,21 @@ export function DashboardV3() {
     }
   };
 
-  // Search recipes
-  const handleSearch = async () => {
-    if (!searchQuery.trim()) {
-      // Empty search - show all recipes
+  // Search recipes - core search logic
+  const performSearch = useCallback(async (query: string) => {
+    if (!query.trim()) {
       setIsSearching(false);
-      setPage(1);
+      setSearchResults([]);
+      setHasSearchResults(true);
       return;
     }
 
     setLoading(true);
     setIsSearching(true);
-    setSearchResults([]);  // Clear previous results
-    setHasSearchResults(true);  // Reset to default
 
     try {
       const response = await fetch(
-        `${API_BASE_URL}/api/recipes/search/cleaned?q=${encodeURIComponent(searchQuery.trim())}`
+        `${API_BASE_URL}/api/recipes/search/cleaned?q=${encodeURIComponent(query.trim())}`
       );
       const data = await response.json();
 
@@ -100,7 +130,7 @@ export function DashboardV3() {
 
         setSearchResults(mappedResults);
         setHasSearchResults(data.hasResults);
-        console.log(`[Dashboard] Search results (제목/재료/레시피): ${data.count} recipes found`);
+        console.log(`[Dashboard] Search results: ${data.count} recipes found`);
       }
     } catch (error) {
       console.error('[Dashboard] Search error:', error);
@@ -109,6 +139,16 @@ export function DashboardV3() {
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  // Manual search handler (for button click / Enter key)
+  const handleSearch = () => {
+    if (!searchQuery.trim()) {
+      setIsSearching(false);
+      setPage(1);
+      return;
+    }
+    performSearch(searchQuery);
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -167,7 +207,7 @@ export function DashboardV3() {
       </div>
 
       {/* Search Bar */}
-      <div className="row justify-content-center mb-5">
+      <div className="row justify-content-center mb-4">
         <div className="col-12">
           <div
             className="input-group"
@@ -191,29 +231,31 @@ export function DashboardV3() {
                 borderRight: '1px solid var(--color-border-light)',
               }}
             />
-            <button
-              className="btn btn-primary"
-              type="button"
-              onClick={handleSearch}
-              disabled={loading}
-              style={{
-                padding: 'var(--spacing-3) var(--spacing-5)',
-                fontWeight: 'var(--font-weight-medium)',
-                fontSize: 'var(--font-size-base)',
-                border: 'none',
-                backgroundColor: 'var(--color-primary)',
-                color: 'white',
-              }}
-            >
-              {loading ? (
-                <>
-                  <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                  검색 중...
-                </>
-              ) : (
-                <>🔍 검색</>
-              )}
-            </button>
+            {!isRealtimeSearch && (
+              <button
+                className="btn btn-primary"
+                type="button"
+                onClick={handleSearch}
+                disabled={loading}
+                style={{
+                  padding: 'var(--spacing-3) var(--spacing-5)',
+                  fontWeight: 'var(--font-weight-medium)',
+                  fontSize: 'var(--font-size-base)',
+                  border: 'none',
+                  backgroundColor: 'var(--color-primary)',
+                  color: 'white',
+                }}
+              >
+                {loading ? (
+                  <>
+                    <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                    검색 중...
+                  </>
+                ) : (
+                  <>🔍 검색</>
+                )}
+              </button>
+            )}
             {isSearching && (
               <button
                 className="btn btn-outline-secondary"
@@ -226,9 +268,32 @@ export function DashboardV3() {
                   borderLeft: '1px solid var(--color-border-light)',
                 }}
               >
-                초기화
+                ✕
               </button>
             )}
+          </div>
+          
+          {/* Realtime search toggle */}
+          <div className="d-flex justify-content-end mt-2">
+            <div className="form-check form-switch">
+              <input
+                className="form-check-input"
+                type="checkbox"
+                id="realtimeSearchToggle"
+                checked={isRealtimeSearch}
+                onChange={(e) => setIsRealtimeSearch(e.target.checked)}
+                style={{ cursor: 'pointer' }}
+              />
+              <label
+                className="form-check-label text-muted"
+                htmlFor="realtimeSearchToggle"
+                style={{ fontSize: 'var(--font-size-sm)', cursor: 'pointer' }}
+              >
+                실시간 검색 {isRealtimeSearch && loading && (
+                  <span className="spinner-border spinner-border-sm ms-1" role="status" aria-hidden="true"></span>
+                )}
+              </label>
+            </div>
           </div>
         </div>
       </div>

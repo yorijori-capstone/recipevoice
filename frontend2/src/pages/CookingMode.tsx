@@ -178,11 +178,14 @@ export function CookingMode() {
     console.log('[CookingMode] Step auto-changed by MCP Tool:', data);
 
     // Update local session state from MCP tool result
-    if (data?.current_step_index !== undefined) {
-      console.log(`✨ Auto-moved to step: ${data.current_step_index + 1}`);
+    // Support both snake_case (current_step_index) and camelCase (stepIndex)
+    const newStepIndex = data?.current_step_index ?? data?.stepIndex;
+    
+    if (newStepIndex !== undefined) {
+      console.log(`✨ Auto-moved to step: ${newStepIndex + 1}`);
       updateSessionState({
-        currentStepIndex: data.current_step_index,
-        viewingStepIndex: data.current_step_index, // 항상 동일하게 유지
+        currentStepIndex: newStepIndex,
+        viewingStepIndex: newStepIndex,
       });
     }
   };
