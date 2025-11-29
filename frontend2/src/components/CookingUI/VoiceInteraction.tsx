@@ -33,7 +33,7 @@ export const VoiceInteraction = forwardRef<VoiceInteractionRef, VoiceInteraction
 }, ref) => {
   const [voiceMode, setVoiceMode] = useState<'none' | 'auto'>('none');
   const [transcripts, setTranscripts] = useState<Array<{ role: 'user' | 'assistant'; text: string; timestamp: Date }>>([]);
-  const [isExpanded, setIsExpanded] = useState(true); // 🆕 접기/펼치기 상태
+  const [isExpanded, setIsExpanded] = useState(false); // 🆕 접기/펼치기 상태 (기본값: 닫힘)
 
   const {
     isConnected,
