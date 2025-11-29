@@ -50,31 +50,16 @@ export function CookingMode() {
 
     sessionInitializedRef.current = true;
 
-    // Check if there's a saved session
-    const savedSessionId = localStorage.getItem('yorijori_current_session_id');
-    const savedRecipeId = localStorage.getItem('yorijori_current_recipe_id');
-
-    if (savedSessionId && savedRecipeId === recipeId) {
-      // Same recipe - try to recover session
-      console.log('[CookingMode] Recovering session for same recipe:', recipeId);
-      recoverSession(savedSessionId).catch((err) => {
-        console.error('[CookingMode] Recovery failed, starting new session:', err);
-        startSession(recipeId);
-      });
-    } else {
-      // Different recipe or no saved session - start new session
-      if (savedSessionId) {
-        console.log('[CookingMode] Different recipe detected, clearing old session');
-        localStorage.removeItem('yorijori_current_session_id');
-        localStorage.removeItem('yorijori_current_recipe_id');
-      }
-      console.log('[CookingMode] Starting new session for recipe:', recipeId);
-      startSession(recipeId).catch((err) => {
-        console.error('Failed to start session:', err);
-        alert('요리 세션을 시작할 수 없습니다.');
-        navigate(`/recipe/${recipeId}`);
-      });
-    }
+    // 🆕 페이지 재진입 시 항상 새 세션 시작 (이전 세션 복구 안 함)
+    console.log('[CookingMode] Page loaded - starting fresh session for recipe:', recipeId);
+    localStorage.removeItem('yorijori_current_session_id');
+    localStorage.removeItem('yorijori_current_recipe_id');
+    
+    startSession(recipeId).catch((err) => {
+      console.error('Failed to start session:', err);
+      alert('요리 세션을 시작할 수 없습니다.');
+      navigate(`/recipe/${recipeId}`);
+    });
 
     // Cleanup on unmount
     return () => {

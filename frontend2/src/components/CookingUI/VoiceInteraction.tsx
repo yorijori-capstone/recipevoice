@@ -330,12 +330,6 @@ export const VoiceInteraction = forwardRef<VoiceInteractionRef, VoiceInteraction
               <br />
               <small>말씀하시면 자동으로 인식됩니다</small>
             </div>
-            {/* 🆕 중단 명령어 안내 */}
-            <div className="mt-3 p-2 rounded" style={{ backgroundColor: 'rgba(255, 193, 7, 0.1)', border: '1px solid rgba(255, 193, 7, 0.3)' }}>
-              <small style={{ color: '#856404' }}>
-                💡 AI를 멈추려면 <strong>"멈춰"</strong>, <strong>"잠깐"</strong>, <strong>"스톱"</strong>이라고 말하세요
-              </small>
-            </div>
           </div>
         )}
 
