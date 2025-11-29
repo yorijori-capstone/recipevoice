@@ -68,7 +68,10 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
 
     console.log(`🔌 [useWebSocket] connect() called with sessionId: ${sessionId}`);
     setStatus('connecting');
-    const wsUrl = 'ws://localhost:3001';
+    // Dynamic WebSocket URL based on current hostname (works on different networks)
+    const hostname = window.location.hostname;
+    const wsUrl = `ws://${hostname}:3001`;
+    console.log(`🔌 [useWebSocket] Connecting to: ${wsUrl}`);
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 

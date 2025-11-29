@@ -16,6 +16,7 @@ export function CookingMode() {
   const timerRef = useRef<TimerDisplayRef>(null);
   const voiceRef = useRef<VoiceInteractionRef>(null);
   const timerTTSCalledRef = useRef(false); // Prevent duplicate TTS calls
+  const sessionInitializedRef = useRef(false); // Prevent duplicate session creation (React StrictMode)
   const [timerCompleteMessage, setTimerCompleteMessage] = useState<string | null>(null);
   const [showPlanModal, setShowPlanModal] = useState(false);
   const [showOpeningRemark, setShowOpeningRemark] = useState(true);
@@ -35,11 +36,19 @@ export function CookingMode() {
   } = useCookingSessionV3();
 
   useEffect(() => {
+    // Prevent duplicate session creation (React StrictMode runs effects twice)
+    if (sessionInitializedRef.current) {
+      console.log('[CookingMode] Session already initialized, skipping');
+      return;
+    }
+    
     if (!recipeId) {
       alert('레시피 ID가 없습니다.');
       navigate('/');
       return;
     }
+
+    sessionInitializedRef.current = true;
 
     // Check if there's a saved session
     const savedSessionId = localStorage.getItem('yorijori_current_session_id');
@@ -70,6 +79,7 @@ export function CookingMode() {
     // Cleanup on unmount
     return () => {
       endSession();
+      sessionInitializedRef.current = false; // Reset for next mount
     };
   }, [recipeId]); // 원래대로 recipeId만 의존성
 
