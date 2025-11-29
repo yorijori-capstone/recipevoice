@@ -1,7 +1,7 @@
 import express from 'express';
 import { RecipeService } from '../services/recipeService.js';
-import { NanoService } from '../services/nanoService.js';
-import { CleanedRecipeService } from '../services/cleanedRecipeService.js';
+import { RecipeCreator } from '../services/recipeCreator.js';
+import { RecipeCleaner } from '../services/recipeCleaner.js';
 import { pool } from '../db/pool.js';
 import dotenv from 'dotenv';
 
@@ -9,8 +9,8 @@ dotenv.config();
 
 const router = express.Router();
 const recipeService = new RecipeService();
-const nanoService = new NanoService(process.env.OPENAI_API_KEY || '');
-const cleanedRecipeService = new CleanedRecipeService(process.env.OPENAI_API_KEY || '');
+const recipeCreator = new RecipeCreator(process.env.OPENAI_API_KEY || '');
+const recipeCleaner = new RecipeCleaner(process.env.OPENAI_API_KEY || '');
 
 // 레시피 목록
 router.get('/', async (req, res) => {
@@ -33,69 +33,8 @@ router.get('/', async (req, res) => {
   }
 });
 
-// 레시피 상세 (cleaned recipe)
-router.get('/:recipeId/cleaned', async (req, res) => {
-  try {
-    const { recipeId } = req.params;
-
-    console.log(`[Recipe API] Getting cleaned recipe: ${recipeId}`);
-
-    const cleanedRecipe = await cleanedRecipeService.getCleanedRecipe(recipeId);
-
-    if (!cleanedRecipe) {
-      return res.status(404).json({
-        error: 'Cleaned recipe not found',
-        message: `Recipe ${recipeId} has not been cleaned yet. Run cleaning first.`
-      });
-    }
-
-    res.json({
-      success: true,
-      recipe: cleanedRecipe
-    });
-  } catch (error: any) {
-    console.error('[Recipe API] Error fetching cleaned recipe:', error);
-    res.status(500).json({
-      error: 'Failed to fetch cleaned recipe',
-      message: error.message
-    });
-  }
-});
-
-// 레시피 상세 (raw recipe)
-router.get('/:recipeId', async (req, res) => {
-  try {
-    const recipe = await recipeService.getRecipeById(req.params.recipeId);
-
-    if (!recipe) {
-      return res.status(404).json({ error: 'Recipe not found' });
-    }
-
-    res.json(recipe);
-  } catch (error) {
-    console.error('Error fetching recipe:', error);
-    res.status(500).json({ error: 'Failed to fetch recipe' });
-  }
-});
-
-// 레시피 검색 (raw recipes)
-router.get('/search/query', async (req, res) => {
-  try {
-    const query = req.query.q as string;
-
-    if (!query) {
-      return res.status(400).json({ error: 'Query parameter required' });
-    }
-
-    const recipes = await recipeService.searchRecipes(query);
-    res.json({ recipes });
-  } catch (error) {
-    console.error('Error searching recipes:', error);
-    res.status(500).json({ error: 'Failed to search recipes' });
-  }
-});
-
-// 레시피 검색 (cleaned recipes - V2)
+// 레시피 검색 (cleaned recipes - V3: 제목 + 재료 + 세부 레시피)
+// IMPORTANT: Must be before /:recipeId/cleaned to avoid route conflict
 router.get('/search/cleaned', async (req, res) => {
   try {
     const query = req.query.q as string;
@@ -106,15 +45,27 @@ router.get('/search/cleaned', async (req, res) => {
 
     console.log(`[Recipe Search] Searching cleaned recipes for: "${query}"`);
 
-    // Search in cleaned_recipes table
+    // Search in title, difficulty, cook_time, ingredients, and recipe steps using subqueries for better performance
     const result = await pool.query(
       `SELECT cr.id, cr.recipe_id, cr.title, cr.opening_remark,
               r.difficulty, r.cook_time, r.servings,
-              (SELECT COUNT(*) FROM cleaned_steps WHERE cleaned_recipe_id = cr.id) as total_steps
+              (SELECT COUNT(*) FROM cleaned_steps WHERE cleaned_recipe_id = cr.id) as total_steps,
+              CASE
+                WHEN cr.title ILIKE $1 THEN 1
+                WHEN r.difficulty ILIKE $1 THEN 2
+                WHEN r.cook_time ILIKE $1 THEN 3
+                WHEN EXISTS (SELECT 1 FROM ingredients i WHERE i.recipe_id = cr.recipe_id AND i.name ILIKE $1) THEN 4
+                WHEN EXISTS (SELECT 1 FROM cleaned_steps cs WHERE cs.cleaned_recipe_id = cr.id AND cs.script ILIKE $1) THEN 5
+                ELSE 6
+              END as match_priority
        FROM cleaned_recipes cr
        LEFT JOIN recipes r ON cr.recipe_id = r.recipe_id
        WHERE cr.title ILIKE $1
-       ORDER BY cr.created_at DESC
+          OR r.difficulty ILIKE $1
+          OR r.cook_time ILIKE $1
+          OR EXISTS (SELECT 1 FROM ingredients i WHERE i.recipe_id = cr.recipe_id AND i.name ILIKE $1)
+          OR EXISTS (SELECT 1 FROM cleaned_steps cs WHERE cs.cleaned_recipe_id = cr.id AND cs.script ILIKE $1)
+       ORDER BY match_priority, cr.created_at DESC
        LIMIT 20`,
       [`%${query}%`]
     );
@@ -145,6 +96,146 @@ router.get('/search/cleaned', async (req, res) => {
       success: false,
       error: 'Failed to search recipes'
     });
+  }
+});
+
+// 레시피 상세 (cleaned recipe)
+router.get('/:recipeId/cleaned', async (req, res) => {
+  try {
+    const { recipeId } = req.params;
+
+    console.log(`[Recipe API] Getting cleaned recipe: ${recipeId}`);
+
+    const cleanedRecipe = await recipeCleaner.getCleanedRecipe(recipeId);
+    if (!cleanedRecipe) {
+      return res.status(404).json({
+        error: 'Cleaned recipe not found',
+        message: `Recipe ${recipeId} has not been cleaned yet. Run cleaning first.`
+      });
+    }
+
+    res.json({
+      success: true,
+      recipe: cleanedRecipe
+    });
+  } catch (error: any) {
+    console.error('[Recipe API] Error fetching cleaned recipe:', error);
+    res.status(500).json({
+      error: 'Failed to fetch cleaned recipe',
+      message: error.message
+    });
+  }
+});
+
+// 레시피 상세 (cleaned recipe 우선, 없으면 raw recipe)
+router.get('/:recipeId', async (req, res) => {
+  try {
+    const { recipeId } = req.params;
+    
+    // 먼저 cleaned recipe 확인
+    const cleanedRecipe = await recipeCleaner.getCleanedRecipe(recipeId);
+    
+    if (cleanedRecipe && cleanedRecipe.planning_result) {
+      // cleaned recipe가 있으면 planning_result에서 데이터 추출하여 프론트엔드 형식으로 변환
+      const planning = cleanedRecipe.planning_result;
+      
+      // recipes 테이블에서 copyright와 source_url 가져오기
+      const recipeInfo = await pool.query(
+        'SELECT copyright, source_url FROM recipes WHERE recipe_id = $1',
+        [recipeId]
+      );
+      
+      const recipeRow = recipeInfo.rows[0];
+      let copyright = recipeRow?.copyright || null;
+      let sourceUrl = recipeRow?.source_url || null;
+      
+      // 새로 생성한 레시피인지 확인 (recipe_id가 recipe_gen_으로 시작)
+      const isGenerated = recipeId.startsWith('recipe_gen_');
+      
+      // 출처 설정
+      if (isGenerated) {
+        copyright = 'Recipe by Recipe Creator';
+      } else if (copyright) {
+        copyright = `Recipe by ${copyright}`;
+      } else {
+        copyright = 'Recipe by 알 수 없음';
+      }
+      
+      // ingredients 변환 (planning_result.ingredients -> 프론트엔드 형식)
+      const allIngredients = [
+        ...planning.ingredients.main.map((ing, idx) => ({
+          id: idx + 1,
+          name: ing.name,
+          quantity: `${ing.amount}${ing.unit}`.trim(),
+          description: ing.notes || null,
+          display_order: idx + 1
+        })),
+        ...planning.ingredients.sub.map((ing, idx) => ({
+          id: planning.ingredients.main.length + idx + 1,
+          name: ing.name,
+          quantity: `${ing.amount}${ing.unit}`.trim(),
+          description: ing.usage || null,
+          display_order: planning.ingredients.main.length + idx + 1
+        }))
+      ];
+      
+      // steps 변환 (planning_result.process -> 프론트엔드 형식)
+      const steps = planning.process.map((step) => ({
+        id: step.step_index,
+        step_number: step.step_index,
+        description: step.description,
+        image_url: null,
+        duration: step.timer_seconds
+      }));
+      
+      // tips 추출 (process에서 tip이 있는 것들)
+      const tips = planning.process
+        .filter(step => step.tip && step.tip.trim())
+        .map(step => step.tip!);
+      
+      // 프론트엔드가 기대하는 형식으로 반환
+      return res.json({
+        id: cleanedRecipe.id,
+        recipe_id: cleanedRecipe.recipe_id,
+        title: planning.meta.title,
+        servings: `${planning.meta.servings}인분`,
+        cook_time: `${planning.meta.time_estimate}분`,
+        difficulty: planning.meta.difficulty,
+        source_url: sourceUrl || null,  // cleaned data의 url, 없으면 raw data에서 가져옴
+        copyright: copyright,  // "Recipe by <작성자>" 형식
+        tips: tips,
+        ingredients: allIngredients,
+        steps: steps
+      });
+    }
+    
+    // cleaned recipe가 없으면 기존 raw recipe 사용 (fallback)
+    const recipe = await recipeService.getRecipeById(recipeId);
+    if (!recipe) {
+      return res.status(404).json({ error: 'Recipe not found' });
+    }
+
+    res.json(recipe);
+  } catch (error) {
+    console.error('Error fetching recipe:', error);
+    res.status(500).json({ error: 'Failed to fetch recipe' });
+  }
+});
+
+// 레시피 검색 (raw recipes)
+router.get('/search/query', async (req, res) => {
+  try {
+    const query = req.query.q as string;
+
+    if (!query) {
+      return res.status(400).json({ error: 'Query parameter required' });
+    }
+
+    const recipes = await recipeService.searchRecipes(query);
+    res.json({ recipes });
+  } catch (error) {
+    console.error('Error searching recipes:', error);
+    res.status(500).json({ error: 'Failed to search recipes' });
   }
 });
 
@@ -340,72 +431,24 @@ router.post('/generate', async (req, res) => {
 
     console.log(`[Recipe API] Generating recipe for: "${prompt}"`);
 
-    // Step 1: Generate recipe using GPT-3.5-turbo
-    const generatedRecipe = await nanoService.generateRecipe(prompt);
+    // Step 1: Generate recipe using GPT-5-nano (returns PlanningOutput)
+    const planningOutput = await recipeCreator.generateRecipe(prompt);
 
     // Step 2: Generate unique recipe_id
     const recipeId = `recipe_gen_${Date.now()}`;
 
-    // Step 3: Save to raw recipe database
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
+    // Step 3: Save PlanningOutput directly to cleaned DB (AI 생성이므로 raw_data 생략)
+    console.log(`[Recipe API] Saving recipe to cleaned DB: ${recipeId}`);
+    const cleanedRecipe = await recipeCleaner.saveCleanedRecipe(recipeId, planningOutput, true);
 
-      // Insert recipe
-      await client.query(
-        `INSERT INTO recipes (recipe_id, title, servings, cook_time, difficulty, tips, source_url, copyright)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [
-          recipeId,
-          generatedRecipe.title,
-          generatedRecipe.servings,
-          generatedRecipe.cook_time,
-          generatedRecipe.difficulty,
-          generatedRecipe.tips || [],
-          'AI Generated',
-          'Generated by GPT-3.5-turbo'
-        ]
-      );
-
-      // Insert ingredients
-      for (let i = 0; i < generatedRecipe.ingredients.length; i++) {
-        const ing = generatedRecipe.ingredients[i];
-        await client.query(
-          `INSERT INTO ingredients (recipe_id, name, quantity, description, display_order)
-           VALUES ($1, $2, $3, $4, $5)`,
-          [recipeId, ing.name, ing.quantity, ing.description || null, i + 1]
-        );
-      }
-
-      // Insert steps
-      for (const step of generatedRecipe.steps) {
-        await client.query(
-          `INSERT INTO steps (recipe_id, step_number, description)
-           VALUES ($1, $2, $3)`,
-          [recipeId, step.order, step.description]
-        );
-      }
-
-      await client.query('COMMIT');
-      console.log(`[Recipe API] Raw recipe saved: ${recipeId}`);
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    } finally {
-      client.release();
-    }
-
-    // Step 4: Automatically clean and plan the recipe
-    console.log(`[Recipe API] Auto-planning recipe: ${recipeId}`);
-    const cleanedRecipe = await cleanedRecipeService.cleanAndPlanRecipe(recipeId);
-
-    // Step 5: Return result
+    // Step 4: Return result (ready for immediate use in session)
     res.json({
       success: true,
       recipe_id: recipeId,
-      title: generatedRecipe.title,
+      title: planningOutput.meta.title,
       cleaned_recipe_id: cleanedRecipe.id,
-      message: 'Recipe generated and planned successfully'
+      planning_result: planningOutput, // Return PlanningOutput for immediate use
+      message: 'Recipe generated and saved successfully'
     });
 
     console.log(`[Recipe API] Recipe generation completed: ${recipeId}`);
@@ -432,7 +475,7 @@ router.post('/recommend', async (req, res) => {
 
     console.log(`[Recipe API] Getting recommendations for: "${preferences}"`);
 
-    const recommendations = await nanoService.recommendRecipes(preferences);
+    const recommendations = await recipeCreator.recommendRecipes(preferences);
 
     res.json({
       success: true,

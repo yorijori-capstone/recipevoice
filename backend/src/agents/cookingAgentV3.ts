@@ -4,8 +4,9 @@
  */
 
 import { EventEmitter } from 'events';
-import { CleanedRecipeService, CleanedRecipe, PlannedStep, ProcessStep, Ingredient, PlanningOutput } from '../services/cleanedRecipeService.js';
+import { RecipeCleaner, CleanedRecipe, PlannedStep, ProcessStep, Ingredient, PlanningOutput } from '../services/recipeCleaner.js';
 import { SessionService, CookingSessionData } from '../services/sessionService.js';
+import { pool } from '../db/pool.js';
 
 // ============================================================================
 // Interfaces
@@ -34,13 +35,13 @@ export interface CookingSession {
 // ============================================================================
 
 export class CookingAgentV3 extends EventEmitter {
-  private cleanedRecipeService: CleanedRecipeService;
+  private recipeCleaner: RecipeCleaner;
   private sessionService: SessionService;
   private sessions: Map<string, CookingSession> = new Map();
 
   constructor(apiKey: string) {
     super();
-    this.cleanedRecipeService = new CleanedRecipeService(apiKey);
+    this.recipeCleaner = new RecipeCleaner(apiKey);
     this.sessionService = new SessionService();
 
     console.log('[CookingAgentV3] Initialized');
@@ -58,7 +59,7 @@ export class CookingAgentV3 extends EventEmitter {
       console.log(`[CookingAgentV3] Starting session for recipe: ${recipeId}`);
 
       // Step 1: Load cleaned recipe (Planning already done!)
-      const cleanedRecipe = await this.cleanedRecipeService.getCleanedRecipe(recipeId);
+      const cleanedRecipe = await this.recipeCleaner.getCleanedRecipe(recipeId);
 
       if (!cleanedRecipe) {
         throw new Error(`Cleaned recipe not found: ${recipeId}. Run cleanAndPlanRecipe first.`);
@@ -118,6 +119,69 @@ export class CookingAgentV3 extends EventEmitter {
    */
   getSession(sessionId: string): CookingSession | undefined {
     return this.sessions.get(sessionId);
+  }
+
+  /**
+   * Recover session from database (for page refresh)
+   */
+  async recoverSession(sessionId: string): Promise<CookingSession | null> {
+    try {
+      // DB에서 세션 정보 가져오기
+      const sessionData = await this.sessionService.getSession(sessionId);
+      if (!sessionData) {
+        return null;
+      }
+
+      // cleaned_recipes 테이블에서 recipe_id 가져오기 (cleaned_recipe_id는 id, recipe_id는 string)
+      const recipeResult = await pool.query(
+        `SELECT recipe_id FROM cleaned_recipes WHERE id = $1`,
+        [sessionData.cleaned_recipe_id]
+      );
+
+      if (recipeResult.rows.length === 0) {
+        console.error(`[CookingAgentV3] Cleaned recipe not found for id: ${sessionData.cleaned_recipe_id}`);
+        return null;
+      }
+
+      const recipeId = recipeResult.rows[0].recipe_id;
+
+      // 레시피 정보 로드
+      const cleanedRecipe = await this.recipeCleaner.getCleanedRecipe(recipeId);
+      if (!cleanedRecipe) {
+        return null;
+      }
+
+      // 세션 객체 재구성
+      const processSteps = cleanedRecipe.process || [];
+      const totalSteps = processSteps.length || cleanedRecipe.planned_steps.length;
+      
+      const session: CookingSession = {
+        sessionId: sessionData.session_id,
+        recipeId: cleanedRecipe.recipe_id,
+        cleanedRecipeId: cleanedRecipe.id,
+        title: cleanedRecipe.title,
+        openingRemark: cleanedRecipe.opening_remark,
+        closingRemark: cleanedRecipe.closing_remark,
+        plannedSteps: cleanedRecipe.planned_steps,
+        process: processSteps,
+        planning_result: cleanedRecipe.planning_result,
+        currentStepIndex: sessionData.current_step_index,
+        viewingStepIndex: sessionData.viewing_step_index,
+        totalSteps,
+        status: sessionData.status as 'active' | 'paused' | 'completed' | 'error',
+        ingredients: cleanedRecipe.ingredients,
+        startedAt: sessionData.started_at
+      };
+
+      // 메모리에 저장
+      this.sessions.set(session.sessionId, session);
+
+      console.log(`[CookingAgentV3] Session recovered: ${sessionId}`);
+      return session;
+    } catch (error) {
+      console.error('[CookingAgentV3] Failed to recover session:', error);
+      return null;
+    }
   }
 
   /**

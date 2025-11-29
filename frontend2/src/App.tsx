@@ -4,6 +4,7 @@ import { DashboardV3 } from "./pages/DashboardV3";
 import { RecipeDetail } from "./pages/RecipeDetail";
 import { CookingMode } from "./pages/CookingMode";
 import VoiceTest from "./pages/VoiceTest";
+import { YoutubeSearch } from "./pages/YoutubeSearch";
 import { Navbar } from "./components/Navbar";
 
 function App() {
@@ -28,6 +29,7 @@ function App() {
           <Route path="/recipe/:id" element={<RecipeDetail />} />
           <Route path="/cooking/:recipeId" element={<CookingMode />} />
           <Route path="/voice-test" element={<VoiceTest />} />
+          <Route path="/youtube-search" element={<YoutubeSearch />} />
         </Routes>
       </div>
     </BrowserRouter>

@@ -7,9 +7,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useCookingSessionV3 } from '../hooks/useCookingSessionV3';
 import { ProgressBar } from '../components/CookingUI/ProgressBar';
-import { StepDisplay } from '../components/CookingUI/StepDisplay';
 import { TimerDisplay, TimerDisplayRef } from '../components/CookingUI/TimerDisplay';
-import { ControlButtons } from '../components/CookingUI/ControlButtons';
 import { VoiceInteraction, VoiceInteractionRef } from '../components/CookingUI/VoiceInteraction';
 
 export function CookingMode() {
@@ -18,6 +16,7 @@ export function CookingMode() {
   const timerRef = useRef<TimerDisplayRef>(null);
   const voiceRef = useRef<VoiceInteractionRef>(null);
   const timerTTSCalledRef = useRef(false); // Prevent duplicate TTS calls
+  const sessionInitializedRef = useRef(false); // Prevent duplicate session creation (React StrictMode)
   const [timerCompleteMessage, setTimerCompleteMessage] = useState<string | null>(null);
   const [showPlanModal, setShowPlanModal] = useState(false);
   const [showOpeningRemark, setShowOpeningRemark] = useState(true);
@@ -37,11 +36,19 @@ export function CookingMode() {
   } = useCookingSessionV3();
 
   useEffect(() => {
+    // Prevent duplicate session creation (React StrictMode runs effects twice)
+    if (sessionInitializedRef.current) {
+      console.log('[CookingMode] Session already initialized, skipping');
+      return;
+    }
+    
     if (!recipeId) {
       alert('레시피 ID가 없습니다.');
       navigate('/');
       return;
     }
+
+    sessionInitializedRef.current = true;
 
     // Check if there's a saved session
     const savedSessionId = localStorage.getItem('yorijori_current_session_id');
@@ -72,10 +79,11 @@ export function CookingMode() {
     // Cleanup on unmount
     return () => {
       endSession();
+      sessionInitializedRef.current = false; // Reset for next mount
     };
-  }, [recipeId]);
+  }, [recipeId]); // 원래대로 recipeId만 의존성
 
-  // UI 확인용 (버튼 클릭) - viewingStepIndex만 이동
+  // UI 버튼 클릭 - 로컬 상태만 변경 (원래 방식)
   const handleNext = () => {
     navigateNext();
   };
@@ -180,11 +188,14 @@ export function CookingMode() {
     console.log('[CookingMode] Step auto-changed by MCP Tool:', data);
 
     // Update local session state from MCP tool result
-    if (data?.current_step_index !== undefined) {
-      console.log(`✨ Auto-moved to step: ${data.current_step_index + 1}`);
+    // Support both snake_case (current_step_index) and camelCase (stepIndex)
+    const newStepIndex = data?.current_step_index ?? data?.stepIndex;
+    
+    if (newStepIndex !== undefined) {
+      console.log(`✨ Auto-moved to step: ${newStepIndex + 1}`);
       updateSessionState({
-        currentStepIndex: data.current_step_index,
-        viewingStepIndex: data.current_step_index,
+        currentStepIndex: newStepIndex,
+        viewingStepIndex: newStepIndex,
       });
     }
   };
@@ -196,9 +207,20 @@ export function CookingMode() {
     // Update local session state from WebSocket event
     updateSessionState({
       currentStepIndex: data.currentStepIndex,
-      viewingStepIndex: data.viewingStepIndex,
+      viewingStepIndex: data.viewingStepIndex, // 별도 관리
       status: data.status,
     });
+  };
+
+  // V3: Handle timer reset from Server
+  const handleTimerReset = (data: { stepIndex: number; reason: string }) => {
+    console.log('[CookingMode] Timer reset:', data);
+    
+    // Force reset timer when step changes
+    if (timerRef.current) {
+      console.log('[CookingMode] Forcing timer reset due to step change');
+      timerRef.current.resetTimer();
+    }
   };
 
   // Loading state
@@ -255,46 +277,110 @@ export function CookingMode() {
 
   // UI 확인용 단계
   const viewingStep = session.plannedSteps[session.viewingStepIndex];
-  // 현재 보고 있는 단계가 실제 진행 단계인지 확인 (음성 상호작용 기준)
-  const isViewingActualStep = session.currentStepIndex === session.viewingStepIndex;
 
   return (
     <div className="container my-4" style={{ padding: 'var(--spacing-4)' }}>
-      {/* Header */}
-      <div className="d-flex justify-content-between align-items-center mb-4">
-        <div>
-          <h2 className="mb-1">{session.title}</h2>
-          <p className="text-muted mb-0">음성 가이드 요리 모드</p>
-        </div>
-        <button
-          className="btn btn-outline-danger"
-          onClick={handleEndSession}
+      {/* Mode Badge - Centered at top */}
+      <div className="text-center mb-3">
+        <span
+          className="badge"
+          style={{
+            background: 'rgba(242, 98, 46, 0.15)',
+            color: 'var(--color-primary-dark)',
+            border: '1px solid var(--color-primary)',
+            padding: 'var(--spacing-2) var(--spacing-4)',
+            fontSize: 'var(--font-size-base)',
+            fontWeight: 'var(--font-weight-semibold)',
+          }}
         >
-          <i className="bi bi-x-lg me-2"></i>
-          종료
-        </button>
+          🎙️ 음성 가이드 요리 모드
+        </span>
       </div>
 
-      {/* Opening Remark (Show at start) */}
+      {/* Header - RecipeDetail Style */}
+      <div
+        className="card mb-4"
+        style={{
+          borderRadius: 'var(--radius-md)',
+          boxShadow: 'var(--shadow-card)',
+        }}
+      >
+        <div className="card-body" style={{ padding: 'var(--spacing-5)' }}>
+          <h1
+            className="card-title mb-0"
+            style={{
+              fontSize: 'var(--font-size-2xl)',
+              fontWeight: 'var(--font-weight-bold)',
+            }}
+          >
+            {session.title}
+          </h1>
+        </div>
+      </div>
+
+      {/* Opening Remark with Help Tips */}
       {showOpeningRemark && session.openingRemark && (
-        <div className="alert alert-success alert-dismissible fade show mb-4" role="alert">
-          <h5 className="alert-heading">
-            <i className="bi bi-chat-dots-fill me-2"></i>
-            AI 요리 가이드
-          </h5>
-          <p className="mb-0">{session.openingRemark}</p>
-          <button
-            type="button"
-            className="btn-close"
-            onClick={() => setShowOpeningRemark(false)}
-            aria-label="Close"
-          ></button>
+        <div className="card mb-4" style={{ borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-card)' }}>
+          <div className="card-body" style={{ padding: 'var(--spacing-4)' }}>
+            <h5 className="mb-3" style={{ fontWeight: 'var(--font-weight-bold)' }}>
+              <i className="bi bi-chat-dots-fill me-2"></i>
+              AI 요리 가이드
+            </h5>
+            <p className="mb-3">{session.openingRemark}</p>
+
+            {/* Help Tips moved here */}
+            {viewingStep && (
+              <details>
+                <summary className="text-muted" style={{ cursor: 'pointer' }}>
+                  💡 추가 도움말 보기
+                </summary>
+                <div className="mt-3 p-3 bg-light rounded">
+                  <div className="mb-2">
+                    <strong>다시 듣고 싶을 때:</strong>
+                    <p className="mb-0 text-muted">{viewingStep.retry_script}</p>
+                  </div>
+                  <div className="mb-2">
+                    <strong>이해가 어려울 때:</strong>
+                    <p className="mb-0 text-muted">{viewingStep.fallback_script}</p>
+                  </div>
+                  <div>
+                    <strong>잠시 멈출 때:</strong>
+                    <p className="mb-0 text-muted">{viewingStep.pause_hint}</p>
+                  </div>
+                </div>
+              </details>
+            )}
+
+            <button
+              type="button"
+              className="btn-close position-absolute top-0 end-0 m-3"
+              onClick={() => setShowOpeningRemark(false)}
+              aria-label="Close"
+            ></button>
+          </div>
         </div>
       )}
 
-      {/* Progress Bar - 음성 상호작용 기준 실제 진행 단계 */}
+      {/* Voice Interaction Section */}
+      {session.sessionId && (
+        <div className="mb-4">
+          <VoiceInteraction
+            ref={voiceRef}
+            key={session.sessionId}
+            sessionId={session.sessionId}
+            currentStepIndex={session.currentStepIndex}
+            plannedSteps={session.plannedSteps}
+            onCommandDetected={handleVoiceCommand}
+            onStepAutoChanged={handleStepAutoChanged}
+            onSessionStateUpdated={handleSessionStateUpdated}
+            onTimerReset={handleTimerReset}
+          />
+        </div>
+      )}
+
+      {/* Progress Bar - UI 보기 기준 단계 */}
       <ProgressBar
-        currentStep={session.currentStepIndex + 1}
+        currentStep={session.viewingStepIndex + 1}
         totalSteps={session.totalSteps}
         status={session.status}
       />
@@ -306,7 +392,7 @@ export function CookingMode() {
             <h1 className="display-3">🎉</h1>
             <h2 className="mb-3">요리 완료!</h2>
             {session.closingRemark && (
-              <div className="alert alert-success d-inline-block mb-4">
+              <div className="alert d-inline-block mb-4" style={{ backgroundColor: 'rgba(242, 98, 46, 0.1)', borderColor: 'rgba(242, 98, 46, 0.2)', color: 'var(--color-primary-dark)' }}>
                 <i className="bi bi-chat-dots-fill me-2"></i>
                 {session.closingRemark}
               </div>
@@ -334,109 +420,111 @@ export function CookingMode() {
         </div>
       ) : (
         <div>
-          {/* Step & Timer - Full Width for Mobile */}
-          <div className="mb-4">
-            {viewingStep && (
-              <>
-                {/* 현재 단계 표시 (음성 상호작용 기준 단계와 일치할 때만) */}
-                {isViewingActualStep && (
-                  <div className="alert alert-info mb-3">
-                    <strong>📝 현재 단계</strong>
-                  </div>
-                )}
+          {/* Voice Interaction Section - moved above */}
 
-                <StepDisplay
-                  step={viewingStep}
-                  stepNumber={session.viewingStepIndex + 1}
-                  totalSteps={session.totalSteps}
-                />
-                <div className="mt-4">
-                  <TimerDisplay
-                    ref={timerRef}
-                    estimatedTimeSec={viewingStep.estimated_time_sec}
-                    timerRequired={viewingStep.timer_required}
-                    isPaused={session.status === 'paused'}
-                    onTimeUp={handleTimerComplete}
-                    onTimerStart={handleTimerStart}
-                  />
+          {/* Step Display with Controls */}
+          {viewingStep && (
+            <div className="card shadow-lg mb-4">
+              <div className="card-header text-white" style={{ background: 'var(--color-primary)' }}>
+                <h4 className="mb-0" style={{ fontWeight: 'var(--font-weight-bold)' }}>
+                  📝 현재 단계
+                </h4>
+              </div>
+              <div className="card-body">
+                <div className="mb-4">
+                  <p className="fs-5 lh-lg">{viewingStep.script}</p>
                 </div>
 
-                {/* Timer Complete Message */}
-                {timerCompleteMessage && (
-                  <div className="alert alert-success alert-dismissible fade show mt-3" role="alert">
-                    <strong>{timerCompleteMessage}</strong>
-                    <button
-                      type="button"
-                      className="btn-close"
-                      onClick={() => setTimerCompleteMessage(null)}
-                      aria-label="Close"
-                    ></button>
+                {viewingStep.timer_required && (
+                  <div className="alert d-flex align-items-center mb-4" style={{ backgroundColor: 'rgba(242, 98, 46, 0.1)', borderColor: 'rgba(242, 98, 46, 0.2)', color: 'var(--color-primary-dark)' }}>
+                    <i className="bi bi-clock-fill me-2"></i>
+                    <div>
+                      <strong>예상 시간:</strong> {Math.floor(viewingStep.estimated_time_sec / 60)}분 {viewingStep.estimated_time_sec % 60}초
+                      {viewingStep.timer_message && (
+                        <div className="mt-1">
+                          <small>{viewingStep.timer_message}</small>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
-              </>
-            )}
-          </div>
 
-          {/* Controls - Full Width for Mobile */}
-          <ControlButtons
-            status={session.status}
-            currentStepIndex={session.viewingStepIndex}
-            totalSteps={session.totalSteps}
-            onPrevious={handlePrevious}
-            onNext={handleNext}
-            loading={loading}
-          />
+                {/* Navigation Buttons */}
+                <div className="d-flex gap-2 mb-3">
+                  <button
+                    className="btn btn-outline-secondary btn-lg flex-grow-1"
+                    onClick={handlePrevious}
+                    disabled={loading || session.viewingStepIndex === 0}
+                  >
+                    <i className="bi bi-chevron-left me-2"></i>
+                    이전
+                  </button>
+                  <button
+                    className="btn btn-primary btn-lg flex-grow-1"
+                    onClick={handleNext}
+                    disabled={loading || session.viewingStepIndex >= session.totalSteps - 1}
+                  >
+                    다음
+                    <i className="bi bi-chevron-right ms-2"></i>
+                  </button>
+                </div>
+
+                {/* Step Counter */}
+                <div className="text-center mt-3">
+                  <small className="text-muted">
+                    {session.viewingStepIndex + 1} / {session.totalSteps} 단계
+                  </small>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Timer */}
+          {viewingStep && (
+            <div className="mb-4">
+              <TimerDisplay
+                ref={timerRef}
+                estimatedTimeSec={viewingStep.estimated_time_sec}
+                timerRequired={viewingStep.timer_required}
+                isPaused={session.status === 'paused'}
+                onTimeUp={handleTimerComplete}
+                onTimerStart={handleTimerStart}
+              />
+            </div>
+          )}
+
+          {/* Timer Complete Message */}
+          {timerCompleteMessage && (
+            <div className="alert alert-dismissible fade show" role="alert" style={{ backgroundColor: 'rgba(242, 98, 46, 0.1)', borderColor: 'rgba(242, 98, 46, 0.2)', color: 'var(--color-primary-dark)' }}>
+              <strong>{timerCompleteMessage}</strong>
+              <button
+                type="button"
+                className="btn-close"
+                onClick={() => setTimerCompleteMessage(null)}
+                aria-label="Close"
+              ></button>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Voice Interaction Section */}
-      {
-        session.status !== 'completed' && session.sessionId && (
-          <div className="row mt-4">
-            <div className="col-12">
-              <VoiceInteraction
-                ref={voiceRef}
-                key={session.sessionId}
-                sessionId={session.sessionId}
-                currentStepIndex={session.currentStepIndex}
-                plannedSteps={session.plannedSteps}
-                onCommandDetected={handleVoiceCommand}
-                onStepAutoChanged={handleStepAutoChanged}
-                onSessionStateUpdated={handleSessionStateUpdated}
-              />
-            </div>
-          </div>
-        )
-      }
+      {/* End Session Button */}
+      {session.status !== 'completed' && (
+        <div className="text-center mt-4">
+          <button
+            className="btn btn-outline-secondary btn-lg"
+            onClick={() => navigate(`/recipe/${recipeId}`)}
+          >
+            🏠 음성 안내 종료
+          </button>
+        </div>
+      )}
 
-      {/* Quick Actions (Moved to bottom) */}
-      {
-        session.status !== 'completed' && (
-          <div className="card shadow mt-4">
-            <div className="card-header bg-secondary text-white">
-              <h6 className="mb-0">빠른 실행</h6>
-            </div>
-            <div className="card-body">
-              <div className="d-grid gap-2">
-                <button
-                  className="btn btn-outline-primary btn-sm"
-                  onClick={() => setShowPlanModal(true)}
-                >
-                  📋 Planning 결과 보기
-                </button>
-                <button
-                  className="btn btn-outline-secondary btn-sm"
-                  onClick={handleEndSession}
-                >
-                  🏠 요리 종료
-                </button>
-              </div>
-            </div>
-          </div>
-        )
-      }
 
-      {/* Planning Result Modal - V2에서는 cleaned_recipes에 저장되어 있음 */}
+
+
+
+      {/* Planning Result Modal - V3에서는 cleaned_recipes에 저장되어 있음 */}
       {
         showPlanModal && (
           <div className="modal show d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
@@ -452,7 +540,7 @@ export function CookingMode() {
                 </div>
                 <div className="modal-body">
                   <p className="text-muted">
-                    이 레시피는 V2 아키텍처를 사용하여 미리 계획되었습니다.
+                    이 레시피는 V3 아키텍처(MCP Tool Calling)를 사용하여 미리 계획되었습니다.
                   </p>
                   <ul>
                     <li>총 단계: {session.totalSteps}개</li>

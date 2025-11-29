@@ -4,6 +4,7 @@
  */
 
 import { useState, useCallback, useEffect } from 'react';
+import { getApiBaseUrl } from '../utils/api';
 
 export interface PlannedStep {
   order: number;
@@ -49,7 +50,7 @@ export interface UseCookingSessionV3Return {
   updateSessionState: (data: { currentStepIndex?: number; viewingStepIndex?: number; status?: string }) => void;
 }
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_BASE_URL = getApiBaseUrl();
 const SESSION_STORAGE_KEY = 'yorijori_current_session_id';
 const SESSION_RECIPE_KEY = 'yorijori_current_recipe_id';
 
@@ -75,7 +76,7 @@ export function useCookingSessionV3(): UseCookingSessionV3Return {
   }, []);
 
   /**
-   * Start a new cooking session using V2 API
+   * Start a new cooking session using V3 API
    */
   const startSession = useCallback(async (recipeId: string) => {
     setLoading(true);
@@ -84,7 +85,7 @@ export function useCookingSessionV3(): UseCookingSessionV3Return {
     try {
       console.log('[useCookingSessionV3] Starting session for recipe:', recipeId);
 
-      const response = await fetch(`${API_BASE_URL}/api/cooking/v2/start`, {
+      const response = await fetch(`${API_BASE_URL}/api/cooking/v3/start`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -121,7 +122,7 @@ export function useCookingSessionV3(): UseCookingSessionV3Return {
     try {
       console.log('[useCookingSessionV3] Recovering session:', sessionId);
 
-      const response = await fetch(`${API_BASE_URL}/api/cooking/v2/session/${sessionId}`);
+      const response = await fetch(`${API_BASE_URL}/api/cooking/v3/session/${sessionId}`);
 
       if (!response.ok) {
         if (response.status === 404) {
@@ -156,7 +157,7 @@ export function useCookingSessionV3(): UseCookingSessionV3Return {
     setError(null);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/cooking/v2/session/${sessionId}`);
+      const response = await fetch(`${API_BASE_URL}/api/cooking/v3/session/${sessionId}`);
 
       if (!response.ok) {
         throw new Error('Failed to get session');
@@ -184,7 +185,7 @@ export function useCookingSessionV3(): UseCookingSessionV3Return {
 
     try {
       const response = await fetch(
-        `${API_BASE_URL}/api/cooking/v2/session/${session.sessionId}/next`,
+        `${API_BASE_URL}/api/cooking/v3/session/${session.sessionId}/next`,
         {
           method: 'POST',
         }
@@ -242,7 +243,7 @@ export function useCookingSessionV3(): UseCookingSessionV3Return {
 
     try {
       const response = await fetch(
-        `${API_BASE_URL}/api/cooking/v2/session/${session.sessionId}/previous`,
+        `${API_BASE_URL}/api/cooking/v3/session/${session.sessionId}/previous`,
         {
           method: 'POST',
         }
@@ -342,7 +343,7 @@ export function useCookingSessionV3(): UseCookingSessionV3Return {
 
     try {
       const response = await fetch(
-        `${API_BASE_URL}/api/cooking/v2/session/${session.sessionId}/end`,
+        `${API_BASE_URL}/api/cooking/v3/session/${session.sessionId}/end`,
         {
           method: 'POST',
         }

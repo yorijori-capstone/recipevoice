@@ -1,9 +1,28 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { RecipeCard } from '../components/RecipeCard';
 import { RecipeGenerateModal } from '../components/RecipeGenerateModal';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+import { getApiBaseUrl } from '../utils/api';
+
+const API_BASE_URL = getApiBaseUrl();
+
+// Custom debounce hook
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [value, delay]);
+
+  return debouncedValue;
+}
 
 interface Recipe {
   id: number;
@@ -28,14 +47,29 @@ export function DashboardV3() {
   const [searchResults, setSearchResults] = useState<Recipe[]>([]);
   const [hasSearchResults, setHasSearchResults] = useState(true);
   const [initialPrompt, setInitialPrompt] = useState('');
+  const [isRealtimeSearch, setIsRealtimeSearch] = useState(true); // Toggle for realtime search
   const limit = 24;
+
+  // Debounced search query for realtime search
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
 
   // Load all recipes
   useEffect(() => {
     if (!isSearching) {
       fetchAllRecipes();
     }
-  }, [page, isSearching]);
+  }, [page, isSearching]); // fetchAllRecipes는 useCallback으로 감싸지 않았으므로 의존성에서 제외
+
+  // Realtime search effect
+  useEffect(() => {
+    if (isRealtimeSearch && debouncedSearchQuery.trim()) {
+      performSearch(debouncedSearchQuery);
+    } else if (isRealtimeSearch && !debouncedSearchQuery.trim()) {
+      setIsSearching(false);
+      setSearchResults([]);
+      setHasSearchResults(true);
+    }
+  }, [debouncedSearchQuery, isRealtimeSearch]);
 
   const fetchAllRecipes = async () => {
     setLoading(true);
@@ -63,23 +97,21 @@ export function DashboardV3() {
     }
   };
 
-  // Search recipes
-  const handleSearch = async () => {
-    if (!searchQuery.trim()) {
-      // Empty search - show all recipes
+  // Search recipes - core search logic
+  const performSearch = useCallback(async (query: string) => {
+    if (!query.trim()) {
       setIsSearching(false);
-      setPage(1);
+      setSearchResults([]);
+      setHasSearchResults(true);
       return;
     }
 
     setLoading(true);
     setIsSearching(true);
-    setSearchResults([]);  // Clear previous results
-    setHasSearchResults(true);  // Reset to default
 
     try {
       const response = await fetch(
-        `${API_BASE_URL}/api/recipes/search/rag?q=${encodeURIComponent(searchQuery.trim())}&top_k=10`
+        `${API_BASE_URL}/api/recipes/search/cleaned?q=${encodeURIComponent(query.trim())}`
       );
       const data = await response.json();
 
@@ -107,6 +139,16 @@ export function DashboardV3() {
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  // Manual search handler (for button click / Enter key)
+  const handleSearch = () => {
+    if (!searchQuery.trim()) {
+      setIsSearching(false);
+      setPage(1);
+      return;
+    }
+    performSearch(searchQuery);
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -143,17 +185,19 @@ export function DashboardV3() {
   return (
     <div className="container" style={{ padding: 'var(--spacing-4)' }}>
       <div className="text-center mb-5" style={{ marginTop: 'var(--spacing-6)' }}>
-        <h1
-          className="display-4 mb-3"
-          style={{
-            fontWeight: 'var(--font-weight-bold)',
-            background: 'linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            backgroundClip: 'text',
-          }}
-        >
-          레시피 모음
+        <h1 className="mb-3" style={{ fontSize: 'clamp(2rem, 5vw, 2.5rem)' }}>
+          <span style={{ marginRight: '12px' }}>🍳</span>
+          <span
+            style={{
+              fontWeight: 'var(--font-weight-extrabold)',
+              background: 'linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+            }}
+          >
+            Yori-Jori
+          </span>
         </h1>
         <p className="text-muted" style={{ fontSize: 'var(--font-size-lg)' }}>
           {isSearching
@@ -163,12 +207,12 @@ export function DashboardV3() {
       </div>
 
       {/* Search Bar */}
-      <div className="row justify-content-center mb-5">
+      <div className="row justify-content-center mb-4">
         <div className="col-12">
           <div
-            className="input-group input-group-lg"
+            className="input-group"
             style={{
-              boxShadow: 'var(--shadow-lg)',
+              boxShadow: '0 2px 12px rgba(181, 181, 181, 0.26)',
               borderRadius: 'var(--radius-lg)',
               overflow: 'hidden',
             }}
@@ -176,40 +220,42 @@ export function DashboardV3() {
             <input
               type="text"
               className="form-control"
-              placeholder="레시피 검색... (예: 김치, 찌개, 볶음)"
+              placeholder="레시피 검색... (예: 김치찌개)"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={handleKeyDown}
               style={{
                 border: 'none',
-                padding: 'var(--spacing-4) var(--spacing-5)',
+                padding: 'var(--spacing-3) var(--spacing-4)',
                 fontSize: 'var(--font-size-lg)',
                 borderRight: '1px solid var(--color-border-light)',
               }}
             />
-            <button
-              className="btn btn-primary"
-              type="button"
-              onClick={handleSearch}
-              disabled={loading}
-              style={{
-                padding: 'var(--spacing-4) var(--spacing-6)',
-                fontWeight: 'var(--font-weight-medium)',
-                fontSize: 'var(--font-size-base)',
-                border: 'none',
-                backgroundColor: 'var(--color-primary)',
-                color: 'white',
-              }}
-            >
-              {loading ? (
-                <>
-                  <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                  검색 중...
-                </>
-              ) : (
-                <>🔍 검색</>
-              )}
-            </button>
+            {!isRealtimeSearch && (
+              <button
+                className="btn btn-primary"
+                type="button"
+                onClick={handleSearch}
+                disabled={loading}
+                style={{
+                  padding: 'var(--spacing-3) var(--spacing-5)',
+                  fontWeight: 'var(--font-weight-medium)',
+                  fontSize: 'var(--font-size-base)',
+                  border: 'none',
+                  backgroundColor: 'var(--color-primary)',
+                  color: 'white',
+                }}
+              >
+                {loading ? (
+                  <>
+                    <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                    검색 중...
+                  </>
+                ) : (
+                  <>🔍 검색</>
+                )}
+              </button>
+            )}
             {isSearching && (
               <button
                 className="btn btn-outline-secondary"
@@ -222,9 +268,32 @@ export function DashboardV3() {
                   borderLeft: '1px solid var(--color-border-light)',
                 }}
               >
-                초기화
+                ✕
               </button>
             )}
+          </div>
+          
+          {/* Realtime search toggle */}
+          <div className="d-flex justify-content-end mt-2">
+            <div className="form-check form-switch">
+              <input
+                className="form-check-input"
+                type="checkbox"
+                id="realtimeSearchToggle"
+                checked={isRealtimeSearch}
+                onChange={(e) => setIsRealtimeSearch(e.target.checked)}
+                style={{ cursor: 'pointer' }}
+              />
+              <label
+                className="form-check-label text-muted"
+                htmlFor="realtimeSearchToggle"
+                style={{ fontSize: 'var(--font-size-sm)', cursor: 'pointer' }}
+              >
+                실시간 검색 {isRealtimeSearch && loading && (
+                  <span className="spinner-border spinner-border-sm ms-1" role="status" aria-hidden="true"></span>
+                )}
+              </label>
+            </div>
           </div>
         </div>
       </div>
@@ -232,25 +301,23 @@ export function DashboardV3() {
       {/* AI Recipe Generation Button */}
       <div className="d-flex justify-content-center mb-5">
         <button
-          className="btn btn-success btn-lg"
+          className="btn btn-success"
           onClick={() => setShowGenerateModal(true)}
           style={{
             background: 'var(--color-primary)',
             border: 'none',
             borderRadius: 'var(--radius-lg)',
-            padding: 'var(--spacing-4) var(--spacing-8)',
+            padding: 'var(--spacing-3) var(--spacing-6)',
             fontWeight: 'var(--font-weight-bold)',
-            fontSize: 'var(--font-size-lg)',
+            fontSize: 'var(--font-size-base)',
             boxShadow: 'var(--shadow-lg)',
             transition: 'all var(--transition-base)',
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.transform = 'translateY(-2px)';
             e.currentTarget.style.boxShadow = 'var(--shadow-xl)';
             e.currentTarget.style.background = 'var(--color-primary-dark)';
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.transform = 'translateY(0)';
             e.currentTarget.style.boxShadow = 'var(--shadow-lg)';
             e.currentTarget.style.background = 'var(--color-primary)';
           }}

@@ -25,14 +25,14 @@ export function ControlButtons({
 
   return (
     <div className="card shadow">
-      <div className="card-header bg-dark text-white">
+      <div className="card-header text-white" style={{ background: 'var(--color-primary)' }}>
         <h5 className="mb-0">📖 단계 이동</h5>
       </div>
       <div className="card-body">
         <div className="d-flex gap-2">
           {/* Previous Step */}
           <button
-            className="btn btn-outline-primary btn-lg flex-grow-1"
+            className="btn btn-outline-secondary btn-lg flex-grow-1"
             onClick={onPrevious}
             disabled={loading || isFirstStep || status === 'completed'}
           >
@@ -64,7 +64,7 @@ export function ControlButtons({
             <span className="badge bg-secondary">준비 중...</span>
           )}
           {status === 'active' && (
-            <span className="badge bg-success">진행 중</span>
+            <span className="badge bg-secondary">진행 중</span>
           )}
           {status === 'paused' && (
             <span className="badge bg-warning">일시정지</span>
