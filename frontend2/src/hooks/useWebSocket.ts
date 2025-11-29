@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 
 interface Transcript {
   role: 'user' | 'assistant';
@@ -29,6 +29,12 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
   const audioQueueRef = useRef<Float32Array[]>([]);
   const isPlayingRef = useRef(false);
   const currentTranscriptRef = useRef<string>('');
+  
+  // Store options in ref to avoid stale closures and unnecessary reconnections
+  const optionsRef = useRef(options);
+  useEffect(() => {
+    optionsRef.current = options;
+  }, [options]);
 
   const playAudioQueue = useCallback(async () => {
     if (audioQueueRef.current.length === 0 || !audioContextRef.current) {
@@ -95,16 +101,16 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
               timestamp: new Date()
             }]);
             // Call callback if provided
-            if (options.onUserTranscription) {
-              options.onUserTranscription(userText);
+            if (optionsRef.current.onUserTranscription) {
+              optionsRef.current.onUserTranscription(userText);
             }
             break;
 
           case 'assistant_transcript_delta':
             currentTranscriptRef.current += data.delta;
             // Call callback with accumulated text
-            if (options.onAssistantTranscript) {
-              options.onAssistantTranscript(currentTranscriptRef.current);
+            if (optionsRef.current.onAssistantTranscript) {
+              optionsRef.current.onAssistantTranscript(currentTranscriptRef.current);
             }
             break;
 
@@ -133,44 +139,44 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
 
           case 'function_call':
             console.log(`🔧 [useWebSocket] Function call: ${data.name}`);
-            if (options.onFunctionCall) {
-              options.onFunctionCall(data.name, data.call_id, data.arguments);
+            if (optionsRef.current.onFunctionCall) {
+              optionsRef.current.onFunctionCall(data.name, data.call_id, data.arguments);
             }
             break;
 
           case 'error':
             console.error('Error from server:', data.error);
             setError(data.error);
-            if (options.onError) {
-              options.onError(data.error);
+            if (optionsRef.current.onError) {
+              optionsRef.current.onError(data.error);
             }
             break;
 
           case 'tool_executed':
             console.log('🔧 [useWebSocket] Tool executed:', data.tool, data.result);
-            if (options.onToolExecuted) {
-              options.onToolExecuted({ tool: data.tool, result: data.result });
+            if (optionsRef.current.onToolExecuted) {
+              optionsRef.current.onToolExecuted({ tool: data.tool, result: data.result });
             }
             break;
 
           case 'step_changed':
             console.log('🔄 [useWebSocket] Step changed:', data);
-            if (options.onStepChanged) {
-              options.onStepChanged(data);
+            if (optionsRef.current.onStepChanged) {
+              optionsRef.current.onStepChanged(data);
             }
             break;
 
           case 'session_state_updated':
             console.log('📊 [useWebSocket] Session state updated:', data);
-            if (options.onSessionStateUpdated) {
-              options.onSessionStateUpdated(data);
+            if (optionsRef.current.onSessionStateUpdated) {
+              optionsRef.current.onSessionStateUpdated(data);
             }
             break;
 
           case 'timer_reset':
             console.log('⏱️ [useWebSocket] Timer reset:', data);
-            if (options.onTimerReset) {
-              options.onTimerReset(data);
+            if (optionsRef.current.onTimerReset) {
+              optionsRef.current.onTimerReset(data);
             }
             break;
         }
@@ -186,8 +192,8 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
       setIsConnected(false);
       const errorMsg = 'WebSocket connection error';
       setError(errorMsg);
-      if (options.onError) {
-        options.onError(errorMsg);
+      if (optionsRef.current.onError) {
+        optionsRef.current.onError(errorMsg);
       }
     };
 
@@ -202,7 +208,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
       const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
       audioContextRef.current = new AudioContextClass({ sampleRate: 24000 });
     }
-  }, [options, playAudioQueue]);
+  }, [playAudioQueue]); // options removed - using optionsRef instead
 
   const disconnect = useCallback(() => {
     console.log('🔌 [useWebSocket] disconnect() called');

@@ -6,7 +6,6 @@
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { spawn, ChildProcess } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -20,8 +19,8 @@ const __dirname = path.dirname(__filename);
 export class MCPClientManager {
   private navigationClient: Client | null = null;
   private timerClient: Client | null = null;
-  private navigationProcess: ChildProcess | null = null;
-  private timerProcess: ChildProcess | null = null;
+  private navigationTransport: StdioClientTransport | null = null;
+  private timerTransport: StdioClientTransport | null = null;
 
   /**
    * Initialize both MCP servers
@@ -53,27 +52,29 @@ export class MCPClientManager {
       ? path.join(__dirname, 'navigation-server.ts')
       : path.join(__dirname, 'navigation-server.js');
     
-    // Windows compatibility: use .cmd extension for npx
+    // Windows compatibility: use cmd.exe /c wrapper
     const isWindows = process.platform === 'win32';
-    const command = isDev ? (isWindows ? 'npx.cmd' : 'npx') : 'node';
-    const args = isDev ? ['tsx', serverPath] : [serverPath];
+    let command: string;
+    let args: string[];
+    
+    if (isDev) {
+      if (isWindows) {
+        // Windows: use cmd.exe /c to properly handle npx
+        command = 'cmd.exe';
+        args = ['/c', 'npx', 'tsx', serverPath];
+      } else {
+        command = 'npx';
+        args = ['tsx', serverPath];
+      }
+    } else {
+      command = 'node';
+      args = [serverPath];
+    }
 
-    this.navigationProcess = spawn(command, args, {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      shell: true,
-    });
-
-    this.navigationProcess.stderr?.on('data', (data) => {
-      console.log(`[Navigation Server] ${data.toString().trim()}`);
-    });
-
-    this.navigationProcess.on('error', (error) => {
-      console.error('[Navigation Server] Process error:', error);
-    });
-
-    const transport = new StdioClientTransport({
+    this.navigationTransport = new StdioClientTransport({
       command,
       args,
+      stderr: 'pipe',
     });
 
     this.navigationClient = new Client(
@@ -86,7 +87,7 @@ export class MCPClientManager {
       }
     );
 
-    await this.navigationClient.connect(transport);
+    await this.navigationClient.connect(this.navigationTransport);
     console.log('[MCP Client] Navigation server connected');
   }
 
@@ -100,27 +101,29 @@ export class MCPClientManager {
       ? path.join(__dirname, 'timer-server.ts')
       : path.join(__dirname, 'timer-server.js');
     
-    // Windows compatibility: use .cmd extension for npx
+    // Windows compatibility: use cmd.exe /c wrapper
     const isWindows = process.platform === 'win32';
-    const command = isDev ? (isWindows ? 'npx.cmd' : 'npx') : 'node';
-    const args = isDev ? ['tsx', serverPath] : [serverPath];
+    let command: string;
+    let args: string[];
+    
+    if (isDev) {
+      if (isWindows) {
+        // Windows: use cmd.exe /c to properly handle npx
+        command = 'cmd.exe';
+        args = ['/c', 'npx', 'tsx', serverPath];
+      } else {
+        command = 'npx';
+        args = ['tsx', serverPath];
+      }
+    } else {
+      command = 'node';
+      args = [serverPath];
+    }
 
-    this.timerProcess = spawn(command, args, {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      shell: true,
-    });
-
-    this.timerProcess.stderr?.on('data', (data) => {
-      console.log(`[Timer Server] ${data.toString().trim()}`);
-    });
-
-    this.timerProcess.on('error', (error) => {
-      console.error('[Timer Server] Process error:', error);
-    });
-
-    const transport = new StdioClientTransport({
+    this.timerTransport = new StdioClientTransport({
       command,
       args,
+      stderr: 'pipe',
     });
 
     this.timerClient = new Client(
@@ -133,7 +136,7 @@ export class MCPClientManager {
       }
     );
 
-    await this.timerClient.connect(transport);
+    await this.timerClient.connect(this.timerTransport);
     console.log('[MCP Client] Timer server connected');
   }
 
@@ -254,12 +257,12 @@ export class MCPClientManager {
         await this.timerClient.close();
       }
 
-      if (this.navigationProcess) {
-        this.navigationProcess.kill();
+      if (this.navigationTransport) {
+        await this.navigationTransport.close();
       }
 
-      if (this.timerProcess) {
-        this.timerProcess.kill();
+      if (this.timerTransport) {
+        await this.timerTransport.close();
       }
 
       console.log('[MCP Client] All MCP servers shut down');

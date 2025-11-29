@@ -203,19 +203,33 @@ export const VoiceInteraction = forwardRef<VoiceInteractionRef, VoiceInteraction
           </span>
         </div>
 
-        {/* V3: Simple ON/OFF Toggle (Manual mode removed) */}
+        {/* V3: Simple ON/OFF Toggle - Shows current state */}
         <button
           type="button"
           className={`btn w-100 ${voiceMode === 'auto' ? 'btn-primary' : 'btn-outline-secondary'}`}
           onClick={() => setVoiceMode(voiceMode === 'auto' ? 'none' : 'auto')}
           disabled={!isConnected}
+          style={{ transition: 'all 0.2s ease' }}
         >
-          {voiceMode === 'auto' ? '🎤 음성 대화 OFF' : '🔇 음성 대화 ON'}
+          {voiceMode === 'auto' ? (
+            <span className="d-flex align-items-center justify-content-center gap-2">
+              <span className="spinner-grow spinner-grow-sm" role="status" aria-hidden="true"></span>
+              🎤 음성 대화 중...
+            </span>
+          ) : (
+            '🔇 음성 대화 시작하기'
+          )}
         </button>
 
         {voiceMode === 'none' && (
           <div className="alert mt-2 mb-0" style={{ fontSize: '0.9rem', backgroundColor: 'rgba(242, 98, 46, 0.1)', borderColor: 'rgba(242, 98, 46, 0.2)', color: 'var(--color-primary-dark)' }}>
             💡 버튼을 눌러 음성 대화를 시작하세요
+          </div>
+        )}
+        
+        {voiceMode === 'auto' && (
+          <div className="alert mt-2 mb-0" style={{ fontSize: '0.9rem', backgroundColor: 'rgba(40, 167, 69, 0.1)', borderColor: 'rgba(40, 167, 69, 0.2)', color: '#155724' }}>
+            🎧 음성을 듣고 있습니다. 버튼을 다시 누르면 종료됩니다.
           </div>
         )}
       </div>

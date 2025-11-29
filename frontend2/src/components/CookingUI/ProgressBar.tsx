@@ -6,7 +6,7 @@
 interface ProgressBarProps {
   currentStep: number;
   totalSteps: number;
-  status: 'planning' | 'active' | 'paused' | 'completed' | 'error';
+  status: 'active' | 'paused' | 'completed' | 'error';
 }
 
 export function ProgressBar({ currentStep, totalSteps, status }: ProgressBarProps) {
@@ -22,8 +22,6 @@ export function ProgressBar({ currentStep, totalSteps, status }: ProgressBarProp
 
   const getStatusIcon = () => {
     switch (status) {
-      case 'planning':
-        return '⏳';
       case 'active':
         return '🔥';
       case 'paused':
@@ -39,8 +37,6 @@ export function ProgressBar({ currentStep, totalSteps, status }: ProgressBarProp
 
   const getStatusText = () => {
     switch (status) {
-      case 'planning':
-        return '준비 중';
       case 'active':
         return '요리 중';
       case 'paused':
