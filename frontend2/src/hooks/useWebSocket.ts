@@ -142,6 +142,20 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
             }
             break;
 
+          // 🆕 사용자가 말하기 시작하면 AI 오디오 재생 즉시 중단
+          case 'speech_started':
+            console.log('🎤 [useWebSocket] User speech started - stopping audio playback');
+            audioQueueRef.current = [];  // 오디오 큐 비우기
+            isPlayingRef.current = false; // 재생 중단
+            break;
+
+          // 🆕 새 응답 시작 시 이전 오디오 완전히 정리 (음성 겹침 방지)
+          case 'response.created':
+            console.log('🔄 [useWebSocket] New response started - clearing audio queue');
+            audioQueueRef.current = [];  // 오디오 큐 비우기
+            isPlayingRef.current = false; // 재생 중단
+            break;
+
           case 'vad_mode_changed':
             console.log(`✅ VAD mode changed to: ${data.mode}`);
             break;

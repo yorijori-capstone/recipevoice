@@ -255,12 +255,23 @@ IMPORTANT INSTRUCTIONS:
   * "몇 단계 있어?" → Use totalSteps
   * "X단계는 뭐야?" → Find that step in the process array
 - For step navigation, use the appropriate functions (navigate_next_step, navigate_previous_step, navigate_to_step)
-- **TIMER INSTRUCTIONS**:
-  - If timer_seconds is set for current step, PROACTIVELY call start_timer when user starts this step
-  - When user says "타이머 시작", "타이머 켜줘", etc., call start_timer function
-  - When user says "타이머 멈춰", "타이머 정지", etc., call stop_timer function
+- **TIMER INSTRUCTIONS (중요!)**:
+  - 타이머가 필요한 단계에서는 **먼저 사용자에게 확인**하세요:
+    예) "이 단계는 2분이 필요해요. 타이머를 설정할까요?"
+  - 사용자가 "응", "네", "좋아", "시작해", "설정해" 등 **긍정적으로 대답하면** start_timer 함수를 호출하세요
+  - 사용자가 "아니", "괜찮아", "필요없어" 등 거절하면 타이머 없이 진행하세요
+  - 사용자가 직접 "타이머 시작", "타이머 켜줘" 등을 말하면 바로 start_timer 호출
+  - "타이머 멈춰", "타이머 정지" 등을 말하면 stop_timer 호출
 - Stay focused on the current cooking step, but use full recipe context for better answers
-- **Only process Korean language inputs** - 한국어 입력만 처리합니다`;
+- **Only process Korean language inputs** - 한국어 입력만 처리합니다
+
+⚠️ **CRITICAL: 도구(함수) 호출 후 반드시 응답하세요!**
+- 타이머 시작(start_timer) 후: "~분 타이머를 시작했어요" 처럼 안내
+- **절대로 침묵하지 마세요!** 도구 호출 후에도 항상 사용자에게 결과를 알려주세요.
+- 사용자가 말하면 반드시 응답하세요. 빈 응답은 허용되지 않습니다.
+
+🛑 **중단 명령어**: 사용자가 "멈춰", "잠깐", "스톱", "그만" 등을 말하면 **즉시 말을 멈추세요**.
+- 현재 하던 설명을 중단하고 "네, 멈출게요" 정도로 짧게 응답하세요.`;
   }
 
   /**
@@ -374,9 +385,9 @@ IMPORTANT:
       this.vadMode === 'server_vad'
         ? {
             type: 'server_vad',
-            threshold: 0.85,           // 0.75 → 0.85 (더 덜 민감하게)
-            prefix_padding_ms: 500,     // 400 → 500 (음성 시작 전 더 기다림)
-            silence_duration_ms: 1200,  // 1000 → 1200 (1.2초 침묵 후 종료)
+            threshold: 0.99,            // 민감도 조절
+            prefix_padding_ms: 0,     // 음성 시작 전 기다림
+            silence_duration_ms: 200,  // 1200 → 1500 (1.5초 침묵 후 종료)
             create_response: true,      // 자동 응답 생성
           }
         : null;
@@ -422,7 +433,7 @@ IMPORTANT:
         turn_detection: turnDetection,
         tools,
         tool_choice: toolChoice,
-        max_response_output_tokens: 500,  // 🆕 응답 길이 제한 (너무 긴 응답 방지)
+        max_response_output_tokens: 2000,  // 🆕 응답 길이 제한 (너무 긴 응답 방지)
       },
     };
 
@@ -564,24 +575,22 @@ IMPORTANT:
       case 'response.created':
         console.log('🔄 Response started');
         this.isResponding = true;
+        // 🆕 새 응답 시작 시 이전 오디오 완전히 정리 (음성 겹침 방지)
+        this.audioQueue = [];
+        this.emit('response_created', event);
+        break;
+
+      // 🆕 응답 취소됨 - 새 입력 준비 완료
+      case 'response.cancelled':
+        console.log('⏹️ Response cancelled - ready for new input');
+        this.isResponding = false;
+        this.audioQueue = [];
         break;
 
       case 'input_audio_buffer.speech_started':
         console.log('🎤 Speech started');
-        
-        // 🆕 AI 응답 중 사용자가 말하면 현재 응답 취소 (인터럽트)
-        if (this.isResponding) {
-          console.log('⏹️ User interrupted - cancelling current response');
-          try {
-            this.sendToOpenAI({ type: 'response.cancel' });
-          } catch (e) {
-            // 취소할 응답이 없으면 무시
-            console.log('ℹ️ No active response to cancel (ignored)');
-          }
-          this.isResponding = false;
-          this.audioQueue = []; // 오디오 큐 비우기
-        }
-        
+        // 🔧 자동 인터럽트 비활성화 - "멈춰", "잠깐", "스톱" 명령어로만 중단
+        // 다른 사람과 대화 중에도 AI가 끊기지 않도록 함
         this.emit('speech_started', event);
         break;
 
@@ -608,6 +617,25 @@ IMPORTANT:
             reason: 'non_korean',
           });
           // Skip processing for non-Korean inputs
+          break;
+        }
+
+        // 🆕 중단 명령어 감지 및 처리
+        const transcript = event.transcript.toLowerCase();
+        const stopCommands = ['멈춰', '잠깐', '스톱', '그만', 'stop', '멈춤', '그만해'];
+        const shouldStop = stopCommands.some(cmd => transcript.includes(cmd));
+        
+        if (shouldStop && this.isResponding) {
+          console.log('🛑 [Stop Command] Detected - cancelling current response');
+          try {
+            this.sendToOpenAI({ type: 'response.cancel' });
+          } catch (e) {
+            console.log('ℹ️ No active response to cancel (ignored)');
+          }
+          this.isResponding = false;
+          this.audioQueue = [];
+          this.clearAudioBuffer();
+          // 중단 명령어는 AI에게 전달하지 않음 (break)
           break;
         }
 

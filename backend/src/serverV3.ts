@@ -158,6 +158,20 @@ wss.on('connection', (ws: WebSocket) => {
       realtimeService.on('audio_delta', audioDeltaHandler);
       eventHandlers.realtimeService.set('audio_delta', audioDeltaHandler);
 
+      // 🆕 Speech started (사용자가 말하기 시작 - 프론트엔드에서 오디오 중단용)
+      const speechStartedHandler: EventHandler = () => {
+        ws.send(JSON.stringify({ type: 'speech_started' }));
+      };
+      realtimeService.on('speech_started', speechStartedHandler);
+      eventHandlers.realtimeService.set('speech_started', speechStartedHandler);
+
+      // 🆕 Response created (새 응답 시작 - 프론트엔드에서 오디오 큐 정리용)
+      const responseCreatedHandler: EventHandler = () => {
+        ws.send(JSON.stringify({ type: 'response.created' }));
+      };
+      realtimeService.on('response_created', responseCreatedHandler);
+      eventHandlers.realtimeService.set('response_created', responseCreatedHandler);
+
       // LangChain response
       const langchainResponseHandler: EventHandler = (data) => {
         console.log('[Server V3] LangChain response:', data);
