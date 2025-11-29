@@ -560,6 +560,12 @@ IMPORTANT:
         this.emit('session_updated', event);
         break;
 
+      // 🆕 응답 시작 시점 정확히 추적
+      case 'response.created':
+        console.log('🔄 Response started');
+        this.isResponding = true;
+        break;
+
       case 'input_audio_buffer.speech_started':
         console.log('🎤 Speech started');
         
@@ -618,7 +624,6 @@ IMPORTANT:
         break;
 
       case 'response.audio.delta':
-        this.isResponding = true; // 🆕 AI가 응답 중임을 표시
         if (event.delta) {
           this.audioQueue.push(event.delta);
           if (!this.isProcessing) {
