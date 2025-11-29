@@ -224,34 +224,34 @@ export const VoiceInteraction = forwardRef<VoiceInteractionRef, VoiceInteraction
           </div>
         </div>
 
+        {/* 🆕 음성 대화 시작 버튼 - 항상 표시 (토글 밖) */}
+        <button
+          type="button"
+          className={`btn w-100 ${voiceMode === 'auto' ? 'btn-primary' : 'btn-outline-secondary'}`}
+          onClick={() => setVoiceMode(voiceMode === 'auto' ? 'none' : 'auto')}
+          disabled={!isConnected}
+          style={{ transition: 'all 0.2s ease', marginBottom: isExpanded ? '0.5rem' : '0' }}
+        >
+          {voiceMode === 'auto' ? (
+            <span className="d-flex align-items-center justify-content-center gap-2">
+              <span className="spinner-grow spinner-grow-sm" role="status" aria-hidden="true"></span>
+              🎤 음성 대화 중...
+            </span>
+          ) : (
+            '🔇 음성 대화 시작하기'
+          )}
+        </button>
+
         {/* 접혀있을 때는 간단한 안내만 표시 */}
         {!isExpanded && (
-          <div className="text-muted small">
+          <div className="text-muted small mt-2">
             음성 대화창이 접혀있습니다. 펼치려면 위 버튼을 클릭하세요.
           </div>
         )}
 
-        {/* 펼쳐져 있을 때만 음성 대화 컨트롤 표시 */}
+        {/* 펼쳐져 있을 때만 안내 메시지 표시 */}
         {isExpanded && (
           <>
-            {/* V3: Simple ON/OFF Toggle - Shows current state */}
-            <button
-              type="button"
-              className={`btn w-100 ${voiceMode === 'auto' ? 'btn-primary' : 'btn-outline-secondary'}`}
-              onClick={() => setVoiceMode(voiceMode === 'auto' ? 'none' : 'auto')}
-              disabled={!isConnected}
-              style={{ transition: 'all 0.2s ease' }}
-            >
-              {voiceMode === 'auto' ? (
-                <span className="d-flex align-items-center justify-content-center gap-2">
-                  <span className="spinner-grow spinner-grow-sm" role="status" aria-hidden="true"></span>
-                  🎤 음성 대화 중...
-                </span>
-              ) : (
-                '🔇 음성 대화 시작하기'
-              )}
-            </button>
-
             {voiceMode === 'none' && (
               <div className="alert mt-2 mb-0" style={{ fontSize: '0.9rem', backgroundColor: 'rgba(242, 98, 46, 0.1)', borderColor: 'rgba(242, 98, 46, 0.2)', color: 'var(--color-primary-dark)' }}>
                 💡 버튼을 눌러 음성 대화를 시작하세요
