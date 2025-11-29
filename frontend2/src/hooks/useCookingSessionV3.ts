@@ -4,6 +4,7 @@
  */
 
 import { useState, useCallback, useEffect } from 'react';
+import { getApiBaseUrl } from '../utils/api';
 
 export interface PlannedStep {
   order: number;
@@ -49,7 +50,7 @@ export interface UseCookingSessionV3Return {
   updateSessionState: (data: { currentStepIndex?: number; viewingStepIndex?: number; status?: string }) => void;
 }
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_BASE_URL = getApiBaseUrl();
 const SESSION_STORAGE_KEY = 'yorijori_current_session_id';
 const SESSION_RECIPE_KEY = 'yorijori_current_recipe_id';
 
