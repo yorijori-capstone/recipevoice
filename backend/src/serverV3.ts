@@ -2,15 +2,17 @@
  * Server V3 - Uses V3 architecture with CookingServiceV3 and MCP Tool Calling
  */
 
+import dotenv from 'dotenv';
+
+// Load environment variables BEFORE importing any modules that need them
+dotenv.config();
+
 import express from 'express';
 import { WebSocketServer, WebSocket } from 'ws';
-import dotenv from 'dotenv';
 import cors from 'cors';
 import recipeRoutes from './routes/recipes.js';
 import cookingV3Routes, { getCookingServiceV3 } from './routes/cookingV3.js';
 import youtubeRoutes from './routes/youtube.js';
-
-dotenv.config();
 
 const app = express();
 app.use(cors());

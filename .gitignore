@@ -336,3 +336,19 @@ frontend/dist/
 # Test data
 voice/test/*.wav
 data/recipes/recipe_*.jsondb_dumps/.-rf voice/
+
+# Sensitive configuration files
+DB_CONFIG_PRESERVE.md
+MERGE_CHECKLIST.md
+SETUP_GUIDE.md
+TROUBLESHOOTING_DB.md
+
+# Test scripts
+comprehensive_test.sh
+hallucination_test.py
+speed_test.sh
+start-servers.sh
+test_demo_recipes.sh
+
+# R history
+.Rhistory

@@ -5,16 +5,28 @@ import {
 } from '../services/youtubeImportService.js';
 
 const router = express.Router();
-const youtubeService = new YoutubeImportService();
+
+// Lazy initialization to ensure environment variables are loaded
+let youtubeService: YoutubeImportService | null = null;
+
+function getYoutubeService(): YoutubeImportService {
+  if (!youtubeService) {
+    youtubeService = new YoutubeImportService();
+  }
+  return youtubeService;
+}
 
 /**
  * GET /api/youtube/search?query=<keyword>&limit=5
  */
 router.get('/search', async (req, res) => {
+  console.log('[YouTube API] /search endpoint hit with query:', req.query);
   try {
     const query = (req.query.query as string) || (req.query.q as string) || '';
     const limit = parseInt((req.query.limit as string) || '5', 10);
-    const results = await youtubeService.searchVideos(query, limit);
+    console.log('[YouTube API] Calling searchVideos with:', { query, limit });
+    const results = await getYoutubeService().searchVideos(query, limit);
+    console.log('[YouTube API] Search successful, found', results.length, 'videos');
 
     res.json({
       success: true,
@@ -50,7 +62,7 @@ router.get('/search', async (req, res) => {
 router.post('/import', async (req, res) => {
   try {
     const { videoId, language, searchQuery } = req.body || {};
-    const result = await youtubeService.importVideo({
+    const result = await getYoutubeService().importVideo({
       videoId,
       language,
       searchQuery,
