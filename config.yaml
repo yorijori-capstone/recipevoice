@@ -17,7 +17,7 @@ database:
   engine: postgres
   host: 127.0.0.1
   port: 5432
-  name: recipevoice
-  user: recipevoice
-  password: recipevoice
+  name: yorijoridb
+  user: insight
+  password: insight
   options: {}

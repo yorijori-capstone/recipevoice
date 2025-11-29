@@ -139,21 +139,21 @@ async function grantPermissions(): Promise<void> {
   const client = await pool.connect();
   try {
     // Grant permissions on all tables
-    await client.query('GRANT ALL PRIVILEGES ON TABLE recipes TO recipevoice');
-    await client.query('GRANT ALL PRIVILEGES ON TABLE ingredients TO recipevoice');
-    await client.query('GRANT ALL PRIVILEGES ON TABLE steps TO recipevoice');
-    await client.query('GRANT ALL PRIVILEGES ON TABLE cleaned_recipes TO recipevoice');
-    await client.query('GRANT ALL PRIVILEGES ON TABLE cleaned_steps TO recipevoice');
-    await client.query('GRANT ALL PRIVILEGES ON TABLE cooking_sessions TO recipevoice');
-    await client.query('GRANT ALL PRIVILEGES ON TABLE session_states TO recipevoice');
+    await client.query('GRANT ALL PRIVILEGES ON TABLE recipes TO insight');
+    await client.query('GRANT ALL PRIVILEGES ON TABLE ingredients TO insight');
+    await client.query('GRANT ALL PRIVILEGES ON TABLE steps TO insight');
+    await client.query('GRANT ALL PRIVILEGES ON TABLE cleaned_recipes TO insight');
+    await client.query('GRANT ALL PRIVILEGES ON TABLE cleaned_steps TO insight');
+    await client.query('GRANT ALL PRIVILEGES ON TABLE cooking_sessions TO insight');
+    await client.query('GRANT ALL PRIVILEGES ON TABLE session_states TO insight');
     
     // Grant permissions on sequences
-    await client.query('GRANT USAGE, SELECT ON SEQUENCE recipes_id_seq TO recipevoice');
-    await client.query('GRANT USAGE, SELECT ON SEQUENCE ingredients_id_seq TO recipevoice');
-    await client.query('GRANT USAGE, SELECT ON SEQUENCE steps_id_seq TO recipevoice');
-    await client.query('GRANT USAGE, SELECT ON SEQUENCE cleaned_recipes_id_seq TO recipevoice');
-    await client.query('GRANT USAGE, SELECT ON SEQUENCE cleaned_steps_id_seq TO recipevoice');
-    await client.query('GRANT USAGE, SELECT ON SEQUENCE session_states_id_seq TO recipevoice');
+    await client.query('GRANT USAGE, SELECT ON SEQUENCE recipes_id_seq TO insight');
+    await client.query('GRANT USAGE, SELECT ON SEQUENCE ingredients_id_seq TO insight');
+    await client.query('GRANT USAGE, SELECT ON SEQUENCE steps_id_seq TO insight');
+    await client.query('GRANT USAGE, SELECT ON SEQUENCE cleaned_recipes_id_seq TO insight');
+    await client.query('GRANT USAGE, SELECT ON SEQUENCE cleaned_steps_id_seq TO insight');
+    await client.query('GRANT USAGE, SELECT ON SEQUENCE session_states_id_seq TO insight');
   
     console.log('✅ 권한 부여 완료\n');
   } catch (error: any) {
@@ -256,7 +256,7 @@ async function deleteExistingData(): Promise<void> {
     console.error('❌ 데이터 삭제 실패:', error.message);
     if (error.code === '42501') {
       console.error('\n💡 해결 방법: 다음 명령으로 권한을 부여하세요:');
-      console.error('   psql -U postgres -d recipevoice -f backend/migrations/005_grant_permissions.sql');
+      console.error('   psql -U postgres -d yorijoridb -f backend/migrations/005_grant_permissions.sql');
       console.error('   또는 pgAdmin에서 backend/migrations/005_grant_permissions.sql 파일을 실행하세요.\n');
     }
     throw error;
@@ -494,4 +494,3 @@ main().catch((error) => {
   console.error('💥 Fatal error:', error);
   process.exit(1);
 });
-

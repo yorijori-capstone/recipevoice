@@ -26,9 +26,9 @@ DUMP_DIR.mkdir(exist_ok=True)
 
 # 데이터베이스 연결 정보
 DB_CONFIG = {
-    "dbname": "recipevoice",
-    "user": "recipevoice",
-    "password": "recipevoice",
+    "dbname": "yorijoridb",
+    "user": "insight",
+    "password": "insight",
     "host": "localhost",
     "port": 5432,
 }
@@ -43,35 +43,58 @@ TABLES = [
 ]
 
 
-def escape_sql_string(value):
-    """SQL 문자열 이스케이프"""
+def escape_sql_value(value, column_meta):
+    """Escape a value according to its PostgreSQL column type."""
     if value is None:
         return "NULL"
-    if isinstance(value, (dict, list)):
-        # JSONB 타입은 JSON 문자열로 변환
-        return f"'{json.dumps(value, ensure_ascii=False).replace(chr(39), chr(39) + chr(39))}'::jsonb"
+
+    data_type, udt_name = column_meta
+
+    if data_type == "ARRAY":
+        element_type = udt_name.lstrip("_")
+        type_annotation = f"{element_type}[]"
+        if not value:
+            return f"ARRAY[]::{type_annotation}"
+        parts = []
+        for item in value:
+            if item is None:
+                parts.append("NULL")
+            else:
+                escaped = str(item).replace("'", "''").replace("\\", "\\\\")
+                parts.append(f"'{escaped}'")
+        return f"ARRAY[{', '.join(parts)}]::{type_annotation}"
+
+    if data_type in {"json", "jsonb"} or isinstance(value, (dict, list)):
+        payload = json.dumps(value, ensure_ascii=False).replace("'", "''")
+        cast = "::jsonb" if data_type != "json" else "::json"
+        return f"'{payload}'{cast}"
+
     if isinstance(value, str):
-        # SQL 문자열 이스케이프: ' -> ''
         escaped = value.replace("'", "''").replace("\\", "\\\\")
         return f"'{escaped}'"
+
     if isinstance(value, bool):
         return "TRUE" if value else "FALSE"
+
     return str(value)
 
 
-def generate_insert_sql(table_name, columns, rows):
+def generate_insert_sql(table_name, columns, column_types, rows):
     """INSERT SQL 문 생성"""
     if not rows:
         return f"-- {table_name}: 0 rows\n"
-    
+
     sql_lines = [f"-- {table_name}: {len(rows)} rows"]
     sql_lines.append(f"TRUNCATE TABLE {table_name} CASCADE;")
-    
+
     for row in rows:
-        values = [escape_sql_string(row.get(col)) for col in columns]
+        values = [
+            escape_sql_value(row.get(col), column_types[idx])
+            for idx, col in enumerate(columns)
+        ]
         values_str = ", ".join(values)
         sql_lines.append(f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({values_str});")
-    
+
     sql_lines.append("")  # 빈 줄
     return "\n".join(sql_lines)
 
@@ -94,13 +117,15 @@ def dump_table(conn, table_name):
             
             # 컬럼 정보 가져오기
             cur.execute(f"""
-                SELECT column_name, data_type 
+                SELECT column_name, data_type, udt_name
                 FROM information_schema.columns 
                 WHERE table_name = %s 
                 ORDER BY ordinal_position;
             """, (table_name,))
             
-            columns = [row[0] for row in cur.fetchall()]
+            column_rows = cur.fetchall()
+            columns = [row[0] for row in column_rows]
+            column_types = [(row[1], row[2]) for row in column_rows]
             
             if not columns:
                 return f"-- {table_name}: 컬럼 없음\n"
@@ -112,7 +137,7 @@ def dump_table(conn, table_name):
             # 딕셔너리 형태로 변환
             row_dicts = [dict(zip(columns, row)) for row in rows]
             
-            return generate_insert_sql(table_name, columns, row_dicts)
+            return generate_insert_sql(table_name, columns, column_types, row_dicts)
     
     except Exception as e:
         return f"-- {table_name}: 오류 발생 - {str(e)}\n"
@@ -136,7 +161,7 @@ def main():
         
         # 덤프 파일명 생성
         date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-        dump_file = DUMP_DIR / f"recipevoice_backup_{date_str}.sql"
+        dump_file = DUMP_DIR / f"yorijoridb_backup_{date_str}.sql"
         
         print(f"\n[2/4] 덤프 파일 생성 중...")
         print(f"      경로: {dump_file}")
@@ -189,7 +214,7 @@ def main():
         print("=" * 60)
         print(f"\n덤프 파일: {dump_file}")
         print(f"\n복원 방법:")
-        print(f"  psql -U recipevoice -d recipevoice < {dump_file}")
+        print(f"  psql -U insight -d yorijoridb < {dump_file}")
         print(f"\n또는 (Python 스크립트 사용):")
         print(f"  poetry run python backend/scripts/db_restore.py {dump_file.name}")
         
@@ -213,4 +238,3 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-

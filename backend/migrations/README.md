@@ -34,21 +34,21 @@ This folder contains database migration scripts for the new architecture.
 cd backend
 
 # Execute migration 001
-psql -U recipevoice -d recipevoice -f migrations/001_create_cleaned_recipes.sql
+psql -U insight -d yorijoridb -f migrations/001_create_cleaned_recipes.sql
 
 # Execute migration 002
-psql -U recipevoice -d recipevoice -f migrations/002_create_sessions.sql
+psql -U insight -d yorijoridb -f migrations/002_create_sessions.sql
 
 # Execute migration 004
-psql -U recipevoice -d recipevoice -f migrations/004_add_raw_data_column.sql
+psql -U insight -d yorijoridb -f migrations/004_add_raw_data_column.sql
 
 # Execute migration 005
-psql -U recipevoice -d recipevoice -f migrations/005_grant_permissions.sql
+psql -U insight -d yorijoridb -f migrations/005_grant_permissions.sql
 ```
 
-**Database**: `recipevoice`  
-**User**: `recipevoice`  
-**Password**: `recipevoice`
+**Database**: `yorijoridb`  
+**User**: `insight`  
+**Password**: `insight`
 
 ---
 
@@ -56,8 +56,8 @@ psql -U recipevoice -d recipevoice -f migrations/005_grant_permissions.sql
 
 1. Open **pgAdmin**
 2. Connect to PostgreSQL server
-3. Navigate to: **Servers** → **PostgreSQL** → **Databases** → **recipevoice**
-4. Right-click on **recipevoice** → **Query Tool**
+3. Navigate to: **Servers** → **PostgreSQL** → **Databases** → **yorijoridb**
+4. Right-click on **yorijoridb** → **Query Tool**
 5. Open file: `migrations/001_create_cleaned_recipes.sql`
 6. Click **Execute** (F5)
 7. Repeat for `migrations/002_create_sessions.sql`
@@ -69,7 +69,7 @@ psql -U recipevoice -d recipevoice -f migrations/005_grant_permissions.sql
 ### **Method 3: Using DBeaver (GUI)**
 
 1. Open **DBeaver**
-2. Connect to PostgreSQL `recipevoice`
+2. Connect to PostgreSQL `yorijoridb`
 3. Right-click on connection → **SQL Editor** → **Open SQL Script**
 4. Select `migrations/001_create_cleaned_recipes.sql`
 5. Click **Execute SQL Statement** (Ctrl+Enter)
