@@ -138,75 +138,84 @@ router.get('/:recipeId', async (req, res) => {
     if (cleanedRecipe && cleanedRecipe.planning_result) {
       // cleaned recipe가 있으면 planning_result에서 데이터 추출하여 프론트엔드 형식으로 변환
       const planning = cleanedRecipe.planning_result;
-      
-      // recipes 테이블에서 copyright와 source_url 가져오기
-      const recipeInfo = await pool.query(
-        'SELECT copyright, source_url FROM recipes WHERE recipe_id = $1',
-        [recipeId]
-      );
-      
-      const recipeRow = recipeInfo.rows[0];
-      let copyright = recipeRow?.copyright || null;
-      let sourceUrl = recipeRow?.source_url || null;
-      
-      // 새로 생성한 레시피인지 확인 (recipe_id가 recipe_gen_으로 시작)
-      const isGenerated = recipeId.startsWith('recipe_gen_');
-      
-      // 출처 설정
-      if (isGenerated) {
-        copyright = 'Recipe by Recipe Creator';
-      } else if (copyright) {
-        copyright = `Recipe by ${copyright}`;
+
+      // 🆕 구 버전 데이터 체크 (planned_steps만 있고 meta/ingredients/process가 없는 경우)
+      const isOldFormat = !planning.meta && !planning.ingredients && !planning.process && (planning as any).planned_steps;
+
+      if (isOldFormat) {
+        console.log(`[Recipe API] Old format detected for recipe ${recipeId}, falling back to raw data`);
+        // 구 버전 데이터는 fallback으로 처리 (아래에서 raw recipe 사용)
       } else {
-        copyright = 'Recipe by 알 수 없음';
+        // 신 버전 데이터 처리
+        // recipes 테이블에서 copyright와 source_url 가져오기
+        const recipeInfo = await pool.query(
+          'SELECT copyright, source_url FROM recipes WHERE recipe_id = $1',
+          [recipeId]
+        );
+
+        const recipeRow = recipeInfo.rows[0];
+        let copyright = recipeRow?.copyright || null;
+        let sourceUrl = recipeRow?.source_url || null;
+
+        // 새로 생성한 레시피인지 확인 (recipe_id가 recipe_gen_으로 시작)
+        const isGenerated = recipeId.startsWith('recipe_gen_');
+
+        // 출처 설정
+        if (isGenerated) {
+          copyright = 'Recipe by Recipe Creator';
+        } else if (copyright) {
+          copyright = `Recipe by ${copyright}`;
+        } else {
+          copyright = 'Recipe by 알 수 없음';
+        }
+
+        // ingredients 변환 (planning_result.ingredients -> 프론트엔드 형식)
+        const allIngredients = [
+          ...planning.ingredients.main.map((ing, idx) => ({
+            id: idx + 1,
+            name: ing.name,
+            quantity: `${ing.amount}${ing.unit}`.trim(),
+            description: ing.notes || null,
+            display_order: idx + 1
+          })),
+          ...planning.ingredients.sub.map((ing, idx) => ({
+            id: planning.ingredients.main.length + idx + 1,
+            name: ing.name,
+            quantity: `${ing.amount}${ing.unit}`.trim(),
+            description: ing.usage || null,
+            display_order: planning.ingredients.main.length + idx + 1
+          }))
+        ];
+
+        // steps 변환 (planning_result.process -> 프론트엔드 형식)
+        const steps = planning.process.map((step) => ({
+          id: step.step_index,
+          step_number: step.step_index,
+          description: step.description,
+          image_url: null,
+          duration: step.timer_seconds
+        }));
+
+        // tips 추출 (process에서 tip이 있는 것들)
+        const tips = planning.process
+          .filter(step => step.tip && step.tip.trim())
+          .map(step => step.tip!);
+
+        // 프론트엔드가 기대하는 형식으로 반환
+        return res.json({
+          id: cleanedRecipe.id,
+          recipe_id: cleanedRecipe.recipe_id,
+          title: planning.meta.title,
+          servings: `${planning.meta.servings}인분`,
+          cook_time: `${planning.meta.time_estimate}분`,
+          difficulty: planning.meta.difficulty,
+          source_url: sourceUrl || null,  // cleaned data의 url, 없으면 raw data에서 가져옴
+          copyright: copyright,  // "Recipe by <작성자>" 형식
+          tips: tips,
+          ingredients: allIngredients,
+          steps: steps
+        });
       }
-      
-      // ingredients 변환 (planning_result.ingredients -> 프론트엔드 형식)
-      const allIngredients = [
-        ...planning.ingredients.main.map((ing, idx) => ({
-          id: idx + 1,
-          name: ing.name,
-          quantity: `${ing.amount}${ing.unit}`.trim(),
-          description: ing.notes || null,
-          display_order: idx + 1
-        })),
-        ...planning.ingredients.sub.map((ing, idx) => ({
-          id: planning.ingredients.main.length + idx + 1,
-          name: ing.name,
-          quantity: `${ing.amount}${ing.unit}`.trim(),
-          description: ing.usage || null,
-          display_order: planning.ingredients.main.length + idx + 1
-        }))
-      ];
-      
-      // steps 변환 (planning_result.process -> 프론트엔드 형식)
-      const steps = planning.process.map((step) => ({
-        id: step.step_index,
-        step_number: step.step_index,
-        description: step.description,
-        image_url: null,
-        duration: step.timer_seconds
-      }));
-      
-      // tips 추출 (process에서 tip이 있는 것들)
-      const tips = planning.process
-        .filter(step => step.tip && step.tip.trim())
-        .map(step => step.tip!);
-      
-      // 프론트엔드가 기대하는 형식으로 반환
-      return res.json({
-        id: cleanedRecipe.id,
-        recipe_id: cleanedRecipe.recipe_id,
-        title: planning.meta.title,
-        servings: `${planning.meta.servings}인분`,
-        cook_time: `${planning.meta.time_estimate}분`,
-        difficulty: planning.meta.difficulty,
-        source_url: sourceUrl || null,  // cleaned data의 url, 없으면 raw data에서 가져옴
-        copyright: copyright,  // "Recipe by <작성자>" 형식
-        tips: tips,
-        ingredients: allIngredients,
-        steps: steps
-      });
     }
     
     // cleaned recipe가 없으면 기존 raw recipe 사용 (fallback)

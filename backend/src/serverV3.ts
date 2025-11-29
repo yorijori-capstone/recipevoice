@@ -26,7 +26,7 @@ app.use('/api/recipes', recipeRoutes);
 // Cooking mode API routes (V3: MCP Tool Calling)
 app.use('/api/cooking/v3', cookingV3Routes);  // v2 → v3로 변경
 
-const PORT = process.env.PORT || 3001;
+const PORT = Number(process.env.PORT) || 3001;
 const HOST = '0.0.0.0'; // Listen on all network interfaces
 const server = app.listen(PORT, HOST, () => {
   console.log(`🚀 Server V3 running on ${HOST}:${PORT}`);
@@ -202,6 +202,20 @@ wss.on('connection', (ws: WebSocket) => {
       };
       realtimeService.on('error', errorHandler);
       eventHandlers.realtimeService.set('error', errorHandler);
+
+      // 🆕 Noise warning handling
+      const noiseWarningHandler: EventHandler = (data) => {
+        console.log('🚨 [Server V3] Noise warning detected');
+        ws.send(
+          JSON.stringify({
+            type: 'noise_warning',
+            reason: data.reason,
+            message: '너무 시끄러워요. 메인 셰프만 말해주세요.'
+          })
+        );
+      };
+      realtimeService.on('noise_warning', noiseWarningHandler);
+      eventHandlers.realtimeService.set('noise_warning', noiseWarningHandler);
 
       console.log(`✅ Realtime handlers setup for session: ${sessionId}`);
     } catch (error: any) {

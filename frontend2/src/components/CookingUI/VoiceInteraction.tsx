@@ -126,6 +126,28 @@ export const VoiceInteraction = forwardRef<VoiceInteractionRef, VoiceInteraction
       console.log('⏱️ [VoiceInteraction] Timer reset:', data);
       onTimerReset?.(data);
     },
+    // 🆕 Noise warning handler
+    onNoiseWarning: (data) => {
+      console.log('🚨 [VoiceInteraction] Noise warning:', data.message);
+
+      // 🔥 즉시 오디오 스트리밍 중단 (가장 중요!)
+      if (isStreaming) {
+        stopStreaming();
+        console.log('⛔ [VoiceInteraction] Audio streaming forcefully stopped due to noise');
+      }
+
+      // WebSocket 연결 해제
+      if (isConnected) {
+        disconnect();
+        console.log('⛔ [VoiceInteraction] WebSocket disconnected due to noise');
+      }
+
+      // 마이크 강제 종료
+      setVoiceMode('none');
+
+      // 사용자에게 경고 표시
+      alert(data.message);
+    },
   });
 
   // Audio recorder hook

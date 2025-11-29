@@ -38,6 +38,23 @@ export class RealtimeServiceV3 extends EventEmitter {
     totalTime: number;
   } | null = null;
 
+  // 🆕 Noise detection tracking
+  private noiseDetection: {
+    lastSpeechStarted: number | null;
+    lastSpeechStopped: number | null;
+    shortSpeechCount: number;
+    shortSpeechTimestamps: number[];  // 짧은 발화 발생 시각 기록
+    rapidFireCount: number;  // 연속 발화 카운트
+    noiseWarningIssued: boolean;
+  } = {
+    lastSpeechStarted: null,
+    lastSpeechStopped: null,
+    shortSpeechCount: 0,
+    shortSpeechTimestamps: [],
+    rapidFireCount: 0,
+    noiseWarningIssued: false
+  };
+
   constructor(config: RealtimeConfig) {
     super();
     this.apiKey = config.apiKey;
@@ -222,6 +239,28 @@ ${currentProcessStep.tip ? `Tip: ${currentProcessStep.tip}` : ''}
 3. Execute commands (next, previous, timer, etc.) through function calling
 4. Keep responses concise and natural
 5. **ALWAYS respond in Korean ONLY** - 절대 한국어로만 대답하세요
+
+═══════════════════════════════════════════════════════════════
+🚫 STRICT RULES (엄격한 규칙)
+═══════════════════════════════════════════════════════════════
+
+⛔ IGNORE NON-COOKING INPUTS (요리와 무관한 입력 무시):
+다음 입력은 **완전히 무시하고 아무 반응도 하지 마세요**:
+- 감사 인사: "감사합니다", "시청해 주셔서 감사합니다", "고맙습니다"
+- 영어/외국어: "thank you", "together on the way", "bye bye"
+- 배경 소음: 알아들을 수 없는 소리, 중얼거림
+- 뉴스/TV 소리: "MBC 뉴스", "이덕영입니다", 방송 멘트
+- 일상 대화: "미안해", "괜찮아", "그래", "좋아" (요리 시작 맥락 제외)
+
+❌ 이런 경우 **절대 응답하지 말고 완전히 침묵하세요**:
+- 사용자: "시청해 주셔서 감사합니다" → (응답 없음)
+- 사용자: "together on the way" → (응답 없음)
+- 사용자: "MBC 뉴스 이덕영입니다" → (응답 없음)
+
+✅ ONLY RESPOND TO (오직 이것만 반응):
+- 요리 관련 질문/명령: "다음", "이전", "재료", "타이머", "어떻게 해"
+- 인사 (첫 단계만): "안녕", "하이", "헬로"
+- 요리 시작 (첫 단계만): "시작", "준비됐어"
 
 ${isFirstStep ? `🎯 FIRST CONVERSATION FLOW (첫 대화 흐름 - 3단계로 진행):
 
@@ -555,11 +594,70 @@ IMPORTANT:
 
       case 'input_audio_buffer.speech_started':
         console.log('🎤 Speech started');
+        const now = Date.now();
+
+        // 🆕 연속 발화 감지: 이전 발화 종료 후 1.5초 이내에 다시 시작되면 소음 의심
+        if (this.noiseDetection.lastSpeechStopped &&
+            (now - this.noiseDetection.lastSpeechStopped) < 1500) {
+          this.noiseDetection.rapidFireCount++;
+          console.log(`⚡ Rapid fire speech detected! Count: ${this.noiseDetection.rapidFireCount}`);
+        } else {
+          this.noiseDetection.rapidFireCount = 0;
+        }
+
+        this.noiseDetection.lastSpeechStarted = now;
         this.emit('speech_started', event);
         break;
 
       case 'input_audio_buffer.speech_stopped':
         console.log('🔇 Speech stopped');
+        this.noiseDetection.lastSpeechStopped = Date.now();
+
+        // 🆕 강화된 소음 감지 로직
+        if (this.noiseDetection.lastSpeechStarted) {
+          const speechDuration = this.noiseDetection.lastSpeechStopped - this.noiseDetection.lastSpeechStarted;
+          const currentTime = Date.now();
+
+          // 1. 짧은 발화 감지 (150ms 이하로 더 엄격)
+          if (speechDuration < 150) {
+            this.noiseDetection.shortSpeechCount++;
+            this.noiseDetection.shortSpeechTimestamps.push(currentTime);
+            console.log(`⚠️ Very short speech detected (${speechDuration}ms). Count: ${this.noiseDetection.shortSpeechCount}`);
+          }
+
+          // 2. 3초 이전의 짧은 발화 기록 제거 (초단기 윈도우)
+          this.noiseDetection.shortSpeechTimestamps = this.noiseDetection.shortSpeechTimestamps.filter(
+            timestamp => (currentTime - timestamp) < 3000
+          );
+          this.noiseDetection.shortSpeechCount = this.noiseDetection.shortSpeechTimestamps.length;
+
+          // 3. 소음 판정 조건 (초초초강력 - 즉시 감지)
+          const isNoisy =
+            // 조건 1: 3초 내에 2번 이상 짧은 발화
+            (this.noiseDetection.shortSpeechCount >= 2) ||
+            // 조건 2: 2번 이상 연속 발화 (1.5초 간격 이내)
+            (this.noiseDetection.rapidFireCount >= 2);
+
+          if (isNoisy && !this.noiseDetection.noiseWarningIssued) {
+            console.log('🚨 NOISE DETECTED! Issuing warning...');
+            console.log(`  - Short speeches: ${this.noiseDetection.shortSpeechCount}/2 (3초 윈도우)`);
+            console.log(`  - Rapid fires: ${this.noiseDetection.rapidFireCount}/2 (1.5초 간격)`);
+
+            this.noiseDetection.noiseWarningIssued = true;
+
+            // 경고 메시지 전송
+            this.sendTextMessage('너무 시끄러워요. 메인 셰프만 말해주세요.');
+
+            // noise_warning 이벤트 발생
+            this.emit('noise_warning', { reason: 'background_noise' });
+
+            // 카운터 리셋
+            this.noiseDetection.shortSpeechCount = 0;
+            this.noiseDetection.shortSpeechTimestamps = [];
+            this.noiseDetection.rapidFireCount = 0;
+          }
+        }
+
         this.emit('speech_stopped', event);
         break;
 

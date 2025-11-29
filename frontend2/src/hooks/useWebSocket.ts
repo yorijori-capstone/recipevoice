@@ -16,6 +16,8 @@ interface UseWebSocketOptions {
   onStepChanged?: (data: any) => void;
   onSessionStateUpdated?: (data: any) => void;
   onTimerReset?: (data: { stepIndex: number; reason: string }) => void;
+  // 🆕 Noise warning
+  onNoiseWarning?: (data: { reason: string; message: string }) => void;
 }
 
 export function useWebSocket(options: UseWebSocketOptions = {}) {
@@ -177,6 +179,13 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
             console.log('⏱️ [useWebSocket] Timer reset:', data);
             if (optionsRef.current.onTimerReset) {
               optionsRef.current.onTimerReset(data);
+            }
+            break;
+
+          case 'noise_warning':
+            console.log('🚨 [useWebSocket] Noise warning:', data);
+            if (options.onNoiseWarning) {
+              options.onNoiseWarning(data);
             }
             break;
         }

@@ -333,15 +333,28 @@ export class RecipeCleaner {
       }));
 
       // 🆕 Get ingredients from planning_result (no need to query raw DB)
-      const allIngredients = [
-        ...(planning_result.ingredients.main || []),
-        ...(planning_result.ingredients.sub || [])
-      ];
-
-      const ingredients: Ingredient[] = allIngredients.map((ing) => ({
-        name: ing.name,
-        quantity: `${ing.amount}${ing.unit}`.trim()
-      }));
+      // 구 버전 데이터 호환성: ingredients가 없으면 빈 배열 사용
+      let ingredients: Ingredient[] = [];
+      if (planning_result.ingredients) {
+        const allIngredients = [
+          ...(planning_result.ingredients.main || []),
+          ...(planning_result.ingredients.sub || [])
+        ];
+        ingredients = allIngredients.map((ing) => ({
+          name: ing.name,
+          quantity: `${ing.amount}${ing.unit}`.trim()
+        }));
+      } else {
+        // 구 버전 데이터: ingredients 테이블에서 조회
+        const ingredientsResult = await pool.query(
+          'SELECT name, quantity FROM ingredients WHERE recipe_id = $1 ORDER BY display_order',
+          [recipeId]
+        );
+        ingredients = ingredientsResult.rows.map((row: any) => ({
+          name: row.name,
+          quantity: row.quantity
+        }));
+      }
 
       return {
         id: recipe.id,
