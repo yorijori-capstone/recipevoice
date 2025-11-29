@@ -24,6 +24,9 @@ export class RealtimeServiceV3 extends EventEmitter {
   private audioQueue: string[] = [];
   private isProcessing: boolean = false;
   private vadMode: 'server_vad' | 'none' = 'server_vad';
+  
+  // 🆕 인터럽트 처리를 위한 응답 상태 추적
+  private isResponding: boolean = false;
 
   // Integration with agents
   private cookingAgent: CookingAgentV3;
@@ -366,13 +369,15 @@ IMPORTANT:
         ? this.generateSystemPrompt(session)
         : 'You are a helpful Korean cooking assistant.');
 
+    // 🔧 VAD 설정 강화: 덜 민감하게 + 인터럽트 지원
     const turnDetection =
       this.vadMode === 'server_vad'
         ? {
             type: 'server_vad',
-            threshold: 0.5,
-            prefix_padding_ms: 300,
-            silence_duration_ms: 700,
+            threshold: 0.75,           // 0.5 → 0.75 (덜 민감하게, 잡음 무시)
+            prefix_padding_ms: 400,     // 300 → 400 (음성 시작 전 더 기다림)
+            silence_duration_ms: 1000,  // 700 → 1000 (1초 침묵 후 종료)
+            create_response: true,      // 자동 응답 생성
           }
         : null;
 
@@ -411,11 +416,13 @@ IMPORTANT:
         output_audio_format: 'pcm16',
         input_audio_transcription: {
           model: 'whisper-1',
-          language: 'ko',  // 🆕 Phase 1: Korean-only STT
+          language: 'ko',
+          prompt: '한국어 요리 대화. 다음, 이전, 타이머, 시작, 안녕',  // 🆕 Whisper 힌트
         },
         turn_detection: turnDetection,
-        tools,  // 🆕 Phase 3: MCP tools
-        tool_choice: toolChoice,  // 🆕 Phase 3: Enable tool calling
+        tools,
+        tool_choice: toolChoice,
+        max_response_output_tokens: 500,  // 🆕 응답 길이 제한 (너무 긴 응답 방지)
       },
     };
 
@@ -555,6 +562,15 @@ IMPORTANT:
 
       case 'input_audio_buffer.speech_started':
         console.log('🎤 Speech started');
+        
+        // 🆕 AI 응답 중 사용자가 말하면 현재 응답 취소 (인터럽트)
+        if (this.isResponding) {
+          console.log('⏹️ User interrupted - cancelling current response');
+          this.sendToOpenAI({ type: 'response.cancel' });
+          this.isResponding = false;
+          this.audioQueue = []; // 오디오 큐 비우기
+        }
+        
         this.emit('speech_started', event);
         break;
 
@@ -602,6 +618,7 @@ IMPORTANT:
         break;
 
       case 'response.audio.delta':
+        this.isResponding = true; // 🆕 AI가 응답 중임을 표시
         if (event.delta) {
           this.audioQueue.push(event.delta);
           if (!this.isProcessing) {
@@ -626,6 +643,7 @@ IMPORTANT:
 
       case 'response.done':
         console.log('✅ Response completed');
+        this.isResponding = false; // 🆕 AI 응답 완료
         this.emit('response_done', event);
         break;
 
@@ -764,15 +782,50 @@ IMPORTANT:
   // ==========================================================================
 
   /**
-   * 🆕 Phase 1: Check if text is predominantly Korean (80% threshold)
+   * 🔧 강화된 STT 필터: 환청 방지 + 한국어 검증
    */
   private isKoreanText(text: string): boolean {
     if (!text || text.trim().length === 0) {
       return false;
     }
 
+    const trimmed = text.trim();
+
+    // 🆕 최소 길이 필터 (너무 짧은 것은 잡음일 수 있음)
+    if (trimmed.length < 2) {
+      console.warn(`⚠️ [Filter] Too short: "${trimmed}"`);
+      return false;
+    }
+
+    // 🆕 특수문자만 있는 경우 필터
+    if (/^[^\w가-힣]+$/.test(trimmed)) {
+      console.warn(`⚠️ [Filter] Only special chars: "${trimmed}"`);
+      return false;
+    }
+
+    // 🆕 반복되는 문자 필터 (예: "으으으으", "아아아아", "음음음")
+    if (/^(.)\1{2,}$/.test(trimmed.replace(/\s/g, ''))) {
+      console.warn(`⚠️ [Filter] Repeated chars: "${trimmed}"`);
+      return false;
+    }
+
+    // 🆕 일반적인 잡음 패턴 필터
+    const noisePatterns = [
+      /^(음|어|으|아|흠|응)+$/,  // 감탄사 반복
+      /^\.+$/,                    // 마침표만
+      /^\?+$/,                    // 물음표만
+      /^!+$/,                     // 느낌표만
+    ];
+    
+    for (const pattern of noisePatterns) {
+      if (pattern.test(trimmed.replace(/\s/g, ''))) {
+        console.warn(`⚠️ [Filter] Noise pattern: "${trimmed}"`);
+        return false;
+      }
+    }
+
     // Remove whitespace for accurate counting
-    const textWithoutSpaces = text.replace(/\s/g, '');
+    const textWithoutSpaces = trimmed.replace(/\s/g, '');
     if (textWithoutSpaces.length === 0) {
       return false;
     }
@@ -784,12 +837,13 @@ IMPORTANT:
     const ratio = koreanCount / textWithoutSpaces.length;
 
     console.log(
-      `[Korean Check] Text: "${text}" | Korean: ${koreanCount}/${textWithoutSpaces.length} (${(
+      `[Korean Check] Text: "${trimmed}" | Korean: ${koreanCount}/${textWithoutSpaces.length} (${(
         ratio * 100
       ).toFixed(1)}%)`
     );
 
-    return ratio >= 0.8; // 80% threshold
+    // 🔧 한국어 비율 기준 강화 (80% → 60%, 하지만 최소 1글자 이상)
+    return ratio >= 0.6 && koreanCount >= 1;
   }
 
   private sendToOpenAI(data: any): void {
