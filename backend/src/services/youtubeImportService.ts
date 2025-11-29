@@ -1,5 +1,5 @@
 import { pool } from '../db/pool.js';
-import { CleanedRecipeService } from './cleanedRecipeService.js';
+import { RecipeCleaner } from './recipeCleaner.js';
 import { VideoService } from 'zubeid-youtube-mcp-server/dist/services/video.js';
 import { TranscriptService } from 'zubeid-youtube-mcp-server/dist/services/transcript.js';
 
@@ -50,13 +50,13 @@ const RECIPE_PREFIX = 'recipe_yt_';
 export class YoutubeImportService {
   private videoService: InstanceType<typeof VideoService>;
   private transcriptService: InstanceType<typeof TranscriptService>;
-  private cleanedRecipeService: CleanedRecipeService;
+  private recipeCleaner: RecipeCleaner;
 
   constructor() {
     this.assertEnv();
     this.videoService = new VideoService();
     this.transcriptService = new TranscriptService();
-    this.cleanedRecipeService = new CleanedRecipeService(
+    this.recipeCleaner = new RecipeCleaner(
       process.env.OPENAI_API_KEY || ''
     );
   }
@@ -162,7 +162,7 @@ export class YoutubeImportService {
 
       await this.saveRecipe(recipeId, rawData, video);
 
-      const cleaned = await this.cleanedRecipeService.cleanAndPlanRecipe(
+      const cleaned = await this.recipeCleaner.cleanAndPlanRecipe(
         recipeId
       );
 
