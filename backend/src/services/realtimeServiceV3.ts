@@ -657,10 +657,15 @@ IMPORTANT:
         this.emit('response_done', event);
         break;
 
-      case 'error':
-        console.error('❌ Error from server:', event.error);
-        this.emit('error', event.error);
-        break;
+        case 'error':
+          // "Cancellation failed" 오류는 무시 (인터럽트 시 발생)
+          if (event.error?.message?.includes('Cancellation failed')) {
+            console.log('ℹ️ Cancellation error ignored (no active response)');
+            break;
+          }
+          console.error('❌ Error from server:', event.error);
+          this.emit('error', event.error);
+          break;
 
       default:
         break;
