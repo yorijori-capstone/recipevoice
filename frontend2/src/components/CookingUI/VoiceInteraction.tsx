@@ -82,16 +82,23 @@ export const VoiceInteraction = forwardRef<VoiceInteractionRef, VoiceInteraction
         onCommandDetected?.('stop_timer');
       }
     },
-    onAssistantTranscript: (text) => {
+    // 🔧 isNewResponse로 새 메시지 vs 업데이트 구분 (덮어쓰기 방지)
+    onAssistantTranscript: (text, isNewResponse) => {
       setTranscripts((prev) => {
         const lastIndex = prev.length - 1;
+        
+        // 새 응답이면 항상 새 메시지 추가
+        if (isNewResponse) {
+          return [...prev, { role: 'assistant', text, timestamp: new Date() }];
+        }
+        
+        // 같은 응답 내에서만 마지막 assistant 메시지 업데이트
         if (lastIndex >= 0 && prev[lastIndex].role === 'assistant') {
-          // Update existing assistant transcript
           const updated = [...prev];
           updated[lastIndex] = { role: 'assistant', text, timestamp: prev[lastIndex].timestamp };
           return updated;
         } else {
-          // Add new assistant transcript
+          // fallback: 새 메시지 추가
           return [...prev, { role: 'assistant', text, timestamp: new Date() }];
         }
       });

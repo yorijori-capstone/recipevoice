@@ -8,7 +8,7 @@ interface Transcript {
 
 interface UseWebSocketOptions {
   onUserTranscription?: (text: string) => void;
-  onAssistantTranscript?: (text: string) => void;
+  onAssistantTranscript?: (text: string, isNewResponse: boolean) => void;  // 🆕 isNewResponse 추가
   onFunctionCall?: (name: string, callId: string, args: any) => void;
   onError?: (error: string) => void;
   // V3 events (MCP Tool Calling)
@@ -29,6 +29,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
   const audioQueueRef = useRef<Float32Array[]>([]);
   const isPlayingRef = useRef(false);
   const currentTranscriptRef = useRef<string>('');
+  const isNewResponseRef = useRef<boolean>(true);  // 🆕 새 응답 여부 추적
   
   // Store options in ref to avoid stale closures and unnecessary reconnections
   const optionsRef = useRef(options);
@@ -103,6 +104,8 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
               text: userText,
               timestamp: new Date()
             }]);
+            // 🆕 사용자가 말하면 다음 AI 응답은 새 응답으로 처리
+            isNewResponseRef.current = true;
             // Call callback if provided
             if (optionsRef.current.onUserTranscription) {
               optionsRef.current.onUserTranscription(userText);
@@ -111,9 +114,10 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
 
           case 'assistant_transcript_delta':
             currentTranscriptRef.current += data.delta;
-            // Call callback with accumulated text
+            // 🆕 새 응답 여부를 콜백에 전달
             if (optionsRef.current.onAssistantTranscript) {
-              optionsRef.current.onAssistantTranscript(currentTranscriptRef.current);
+              optionsRef.current.onAssistantTranscript(currentTranscriptRef.current, isNewResponseRef.current);
+              isNewResponseRef.current = false;  // 첫 delta 이후는 업데이트 모드
             }
             break;
 
@@ -126,6 +130,8 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
               }]);
               currentTranscriptRef.current = '';
             }
+            // 🆕 응답 완료 후 다음 응답은 새 응답
+            isNewResponseRef.current = true;
             break;
 
           case 'audio_delta':

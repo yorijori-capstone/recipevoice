@@ -374,9 +374,9 @@ IMPORTANT:
       this.vadMode === 'server_vad'
         ? {
             type: 'server_vad',
-            threshold: 0.75,           // 0.5 → 0.75 (덜 민감하게, 잡음 무시)
-            prefix_padding_ms: 400,     // 300 → 400 (음성 시작 전 더 기다림)
-            silence_duration_ms: 1000,  // 700 → 1000 (1초 침묵 후 종료)
+            threshold: 0.85,           // 0.75 → 0.85 (더 덜 민감하게)
+            prefix_padding_ms: 500,     // 400 → 500 (음성 시작 전 더 기다림)
+            silence_duration_ms: 1200,  // 1000 → 1200 (1.2초 침묵 후 종료)
             create_response: true,      // 자동 응답 생성
           }
         : null;
@@ -572,7 +572,12 @@ IMPORTANT:
         // 🆕 AI 응답 중 사용자가 말하면 현재 응답 취소 (인터럽트)
         if (this.isResponding) {
           console.log('⏹️ User interrupted - cancelling current response');
-          this.sendToOpenAI({ type: 'response.cancel' });
+          try {
+            this.sendToOpenAI({ type: 'response.cancel' });
+          } catch (e) {
+            // 취소할 응답이 없으면 무시
+            console.log('ℹ️ No active response to cancel (ignored)');
+          }
           this.isResponding = false;
           this.audioQueue = []; // 오디오 큐 비우기
         }
