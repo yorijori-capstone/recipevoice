@@ -268,10 +268,7 @@ IMPORTANT INSTRUCTIONS:
 ⚠️ **CRITICAL: 도구(함수) 호출 후 반드시 응답하세요!**
 - 타이머 시작(start_timer) 후: "~분 타이머를 시작했어요" 처럼 안내
 - **절대로 침묵하지 마세요!** 도구 호출 후에도 항상 사용자에게 결과를 알려주세요.
-- 사용자가 말하면 반드시 응답하세요. 빈 응답은 허용되지 않습니다.
-
-🛑 **중단 명령어**: 사용자가 "멈춰", "잠깐", "스톱", "그만" 등을 말하면 **즉시 말을 멈추세요**.
-- 현재 하던 설명을 중단하고 "네, 멈출게요" 정도로 짧게 응답하세요.`;
+- 사용자가 말하면 반드시 응답하세요. 빈 응답은 허용되지 않습니다.`;
   }
 
   /**
@@ -385,9 +382,9 @@ IMPORTANT:
       this.vadMode === 'server_vad'
         ? {
             type: 'server_vad',
-            threshold: 0.99,            // 민감도 조절
-            prefix_padding_ms: 0,     // 음성 시작 전 기다림
-            silence_duration_ms: 200,  // 1200 → 1500 (1.5초 침묵 후 종료)
+            threshold: 0.85,            // 민감도 조절
+            prefix_padding_ms: 300,     // 음성 시작 전 기다림
+            silence_duration_ms: 500,  // 1200 → 1500 (1.5초 침묵 후 종료)
             create_response: true,      // 자동 응답 생성
           }
         : null;
@@ -433,7 +430,7 @@ IMPORTANT:
         turn_detection: turnDetection,
         tools,
         tool_choice: toolChoice,
-        max_response_output_tokens: 2000,  // 🆕 응답 길이 제한 (너무 긴 응답 방지)
+        max_response_output_tokens: "inf",  // 🆕 응답 길이 제한
       },
     };
 
@@ -605,6 +602,11 @@ IMPORTANT:
         break;
 
       case 'conversation.item.input_audio_transcription.completed':
+        // 🆕 빈 문자열 즉시 필터링 (잡음만 감지된 경우)
+        if (!event.transcript || event.transcript.trim().length === 0) {
+          return; // 로그 없이 조용히 무시
+        }
+
         console.log('👤 [USER]:', event.transcript);
 
         // 🆕 Phase 1: Filter non-Korean transcriptions
@@ -620,25 +622,7 @@ IMPORTANT:
           break;
         }
 
-        // 🆕 중단 명령어 감지 및 처리
-        const transcript = event.transcript.toLowerCase();
-        const stopCommands = ['멈춰', '잠깐', '스톱', '그만', 'stop', '멈춤', '그만해'];
-        const shouldStop = stopCommands.some(cmd => transcript.includes(cmd));
-        
-        if (shouldStop && this.isResponding) {
-          console.log('🛑 [Stop Command] Detected - cancelling current response');
-          try {
-            this.sendToOpenAI({ type: 'response.cancel' });
-          } catch (e) {
-            console.log('ℹ️ No active response to cancel (ignored)');
-          }
-          this.isResponding = false;
-          this.audioQueue = [];
-          this.clearAudioBuffer();
-          // 중단 명령어는 AI에게 전달하지 않음 (break)
-          break;
-        }
-
+        // 🔧 중단 기능 제거 - 모든 발화를 AI에게 전달
         this.emit('user_transcription', {
           transcript: event.transcript,
           item_id: event.item_id,
@@ -650,6 +634,7 @@ IMPORTANT:
         break;
 
       case 'response.audio_transcript.delta':
+        // 🔧 [STOP] 태그 감지 제거
         this.emit('assistant_transcript_delta', {
           delta: event.delta,
           item_id: event.item_id,
