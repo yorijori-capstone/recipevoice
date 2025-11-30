@@ -586,8 +586,16 @@ IMPORTANT:
 
       case 'input_audio_buffer.speech_started':
         console.log('🎤 Speech started');
-        // 🔧 자동 인터럽트 비활성화 - "멈춰", "잠깐", "스톱" 명령어로만 중단
-        // 다른 사람과 대화 중에도 AI가 끊기지 않도록 함
+        
+        // 🆕 AI 응답 중 사용자가 말하면 현재 응답 취소 (인터럽트)
+        // 비활성화됨: GPT가 말하는 중에도 마이크 입력 허용
+        // if (this.isResponding) {
+        //   console.log('⏹️ User interrupted - cancelling current response');
+        //   this.sendToOpenAI({ type: 'response.cancel' });
+        //   this.isResponding = false;
+        //   this.audioQueue = []; // 오디오 큐 비우기
+        // }
+        
         this.emit('speech_started', event);
         break;
 
