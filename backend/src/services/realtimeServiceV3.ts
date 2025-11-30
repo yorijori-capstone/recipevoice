@@ -784,7 +784,8 @@ IMPORTANT:
           });
 
           const updatedPrompt = this.generateSystemPrompt(this.session);
-          await this.sendSessionUpdate(updatedPrompt);
+          await this.sendSessionUpdate(updatedPrompt, false); // ✅ Context-only update, no VAD reset
+          console.log('✅ Session context updated for new step');
         }
       }
 
