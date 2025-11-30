@@ -273,9 +273,9 @@ IMPORTANT INSTRUCTIONS:
   - 사용자가 직접 "타이머 시작", "타이머 켜줘" 등을 말하면 바로 start_timer 호출
   - "타이머 멈춰", "타이머 정지" 등을 말하면 stop_timer 호출
   - **타이머가 실행 중일 때 사용자가 "다음 단계", "다음으로", "다음" 등을 말하면**:
-    - navigate_next_step 함수를 호출하세요 (타이머는 자동으로 중지됩니다)
-    - 사용자에게 "타이머를 중지하고 다음 단계로 넘어갈게요" 또는 "다음 단계로 넘어갈게요"라고 안내하세요
-    - stop_timer를 별도로 호출할 필요 없습니다 (navigate_next_step이 자동 처리)
+    1. 먼저 stop_timer 함수를 호출하여 타이머를 중지하세요
+    2. 그 다음 navigate_next_step 함수를 호출하여 다음 단계로 이동하세요
+    3. 사용자에게 "타이머를 중지하고 다음 단계로 넘어갈게요"라고 안내하세요
 - Stay focused on the current cooking step, but use full recipe context for better answers
 - **Only process Korean language inputs** - 한국어 입력만 처리합니다
 
@@ -761,21 +761,6 @@ IMPORTANT:
 
       console.log(`[RealtimeServiceV3] Tool result:`, result);
 
-      // 🆕 Tool 실행 결과 검증
-      if (result && typeof result === 'object' && 'content' in result) {
-        const content = result.content?.[0];
-        if (content?.type === 'text') {
-          try {
-            const parsed = JSON.parse(content.text);
-            if (parsed.success === false && parsed.error) {
-              console.warn(`[RealtimeServiceV3] Tool ${toolName} returned error:`, parsed.error);
-            }
-          } catch (e) {
-            // JSON 파싱 실패는 무시 (정상적인 텍스트 응답일 수 있음)
-          }
-        }
-      }
-
       // Send tool result back to Realtime API
       const toolResponse = {
         type: 'conversation.item.create',
@@ -787,25 +772,63 @@ IMPORTANT:
       };
 
       this.sendToOpenAI(toolResponse);
-      this.emit('tool_executed', { tool: toolName, result });
 
+      // Request new response from GPT
+      const createResponse = {
+        type: 'response.create',
+      };
+
+      this.sendToOpenAI(createResponse);
+
+      // 🆕 Emit tool execution event for WebSocket broadcast
+      this.emit('tool_executed', {
+        sessionId: this.currentSessionId,
+        toolName,
+        args,
+        result,
+      });
+
+      // Update session prompt if step changed (navigation tools)
+      if (result.success && toolName.startsWith('navigate_')) {
+        // Tool changed step in DB, but in-memory session is stale
+        // Need to update in-memory session from tool result
+        const session = this.cookingAgent.getSession(this.currentSessionId);
+        if (session && result.current_step_index !== undefined) {
+          session.currentStepIndex = result.current_step_index;
+          session.viewingStepIndex = result.current_step_index;
+
+          // 🆕 Reset timer state on step change
+          this.timerState = null;
+
+          // 🆕 Emit timer reset event for frontend synchronization
+          this.emit('timer_reset', {
+            sessionId: this.currentSessionId,
+            stepIndex: result.current_step_index,
+            reason: 'step_changed'
+          });
+
+          const updatedPrompt = this.generateSystemPrompt(session);
+          await this.sendSessionUpdate(updatedPrompt);
+        }
+      }
     } catch (error: any) {
-      console.error(`[RealtimeServiceV3] Error executing tool ${event.name}:`, error);
-      
-      // 🆕 에러 응답을 Realtime API에 전송하여 AI가 에러를 인지하도록 함
+      console.error('[RealtimeServiceV3] Tool execution error:', error);
+
+      // Send error back to Realtime API
       const errorResponse = {
-         type: 'conversation.item.create',
-         item: {
-           type: 'function_call_output',
-           call_id: event.call_id,
-           output: JSON.stringify({
-             success: false,
-             error: error.message || 'Tool execution failed',
-           }),
-         },
-       };
-       this.sendToOpenAI(errorResponse);
-       
+        type: 'conversation.item.create',
+        item: {
+          type: 'function_call_output',
+          call_id: event.call_id,
+          output: JSON.stringify({
+            success: false,
+            error: error.message,
+          }),
+        },
+      };
+
+      this.sendToOpenAI(errorResponse);
+
       this.emit('error', error);
     }
   }

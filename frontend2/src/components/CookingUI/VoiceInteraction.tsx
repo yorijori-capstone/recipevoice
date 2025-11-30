@@ -111,28 +111,6 @@ export const VoiceInteraction = forwardRef<VoiceInteractionRef, VoiceInteraction
       // Handle navigation tools
       if (tool === 'navigate_next_step' || tool === 'navigate_previous_step' || tool === 'navigate_to_step') {
         console.log(`✨ [VoiceInteraction] Navigation tool executed: ${tool}`);
-        
-        // 🆕 타이머가 자동으로 중지되었으면 프론트엔드 타이머도 중지
-        // result는 MCP tool의 반환값: { content: [{ type: 'text', text: JSON.stringify({...}) }] }
-        try {
-          if (result && typeof result === 'object' && 'content' in result) {
-            const content = result.content?.[0];
-            if (content?.type === 'text' && content.text) {
-              const parsed = JSON.parse(content.text);
-              if (parsed.timer_stopped === true) {
-                console.log('⏱️ [VoiceInteraction] Timer was auto-stopped during navigation');
-                onCommandDetected?.('stop_timer');
-              }
-              // 파싱된 결과를 onStepAutoChanged에 전달
-              onStepAutoChanged?.(parsed);
-              return;
-            }
-          }
-        } catch (e) {
-          console.warn('[VoiceInteraction] Failed to parse tool result:', e);
-        }
-        
-        // 파싱 실패 시 원본 result 전달
         onStepAutoChanged?.(result);
       }
       // Handle timer tools

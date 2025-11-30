@@ -183,7 +183,6 @@ async function handleNextStep(sessionId: string) {
     }
 
     // 🆕 타이머가 실행 중이면 자동으로 중지
-    let timerWasStopped = false; // 타이머 중지 여부 추적
     const timerCheckResult = await client.query(
       `SELECT state_data, created_at FROM session_states
        WHERE session_id = $1 AND state_type = 'timer_event'
@@ -193,39 +192,29 @@ async function handleNextStep(sessionId: string) {
 
     if (timerCheckResult.rows.length > 0) {
       const lastTimer = timerCheckResult.rows[0].state_data;
+      const now = new Date();
+      const endTime = new Date(lastTimer.end_time);
       
       // 타이머가 실행 중이면 (마지막 이벤트가 start이고 아직 만료되지 않음)
-      // 이미 stop_timer로 중지되었는지 확인 (action === 'stop'이면 이미 중지됨)
-      if (lastTimer.action === 'start' && lastTimer.end_time) {
-        const now = new Date();
-        const endTime = new Date(lastTimer.end_time);
-        
-        // 아직 만료되지 않았으면 중지
-        if (now < endTime) {
-          // 타이머 중지 이벤트 기록
-          await client.query(
-            `INSERT INTO session_states (session_id, state_type, state_data)
-             VALUES ($1, $2, $3)`,
-            [
-              sessionId,
-              'timer_event',
-              JSON.stringify({
-                action: 'stop',
-                label: lastTimer.label,
-                duration_seconds: lastTimer.duration_seconds,
-                step: lastTimer.step,
-                start_time: lastTimer.start_time,
-                stop_time: now.toISOString(),
-                auto_stopped: true, // 자동 중지 표시
-              }),
-            ]
-          );
-          timerWasStopped = true; // 타이머가 중지되었음을 표시
-          console.log(`[MCP Navigation] ⏹️ Timer stopped automatically before step change (step ${current_step_index} → ${current_step_index + 1}, timer: ${lastTimer.label || 'unknown'})`);
-        } else {
-          // 이미 만료된 타이머는 자동으로 중지 처리하지 않음 (만료 상태 유지)
-          console.log(`[MCP Navigation] Timer already expired, skipping auto-stop`);
-        }
+      if (lastTimer.action === 'start' && now < endTime) {
+        // 타이머 중지 이벤트 기록
+        await client.query(
+          `INSERT INTO session_states (session_id, state_type, state_data)
+           VALUES ($1, $2, $3)`,
+          [
+            sessionId,
+            'timer_event',
+            JSON.stringify({
+              action: 'stop',
+              label: lastTimer.label,
+              duration_seconds: lastTimer.duration_seconds,
+              step: lastTimer.step,
+              start_time: lastTimer.start_time,
+              stop_time: now.toISOString(),
+            }),
+          ]
+        );
+        console.log(`[MCP Navigation] Timer stopped automatically before step change`);
       }
     }
 
@@ -276,7 +265,6 @@ async function handleNextStep(sessionId: string) {
             previous_step_index: current_step_index,
             current_step_index: newStepIndex,
             total_steps,
-            timer_stopped: timerWasStopped, // 🆕 타이머가 자동으로 중지되었는지 표시
             step: step ? {
               step_order: step.step_order,
               script: step.script,
