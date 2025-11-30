@@ -127,9 +127,27 @@ export class YoutubeScrapClient {
       // Parse it to extract structured data
       const text = content.text;
 
-      // Check for warnings/errors
-      if (text.includes('⚠️') || text.includes('❌')) {
+      // Check for actual errors only (not warnings)
+      // ⚠️ warnings are okay (e.g., Whisper not installed but subtitles available)
+      if (text.includes('❌')) {
         throw new Error('YouTube content extraction failed: ' + text);
+      }
+
+      // If response is just a warning about Whisper, return minimal data
+      // The service will fall back to description + comments
+      if (text.includes('⚠️') && text.includes('Whisper')) {
+        console.log('[YouTube Scrap Client] Warning: No transcript available (Whisper not installed and no subtitles)');
+        return {
+          videoId: '',
+          title: 'Unknown Title',
+          description: '',
+          channelTitle: 'YouTube Creator',
+          channelId: '',
+          publishedAt: new Date().toISOString(),
+          duration: null,
+          thumbnails: [],
+          transcript: [], // Empty transcript - will use comments + description instead
+        };
       }
 
       // Extract title (format: # Title)

@@ -2,6 +2,7 @@ import { pool } from '../db/pool.js';
 import { RecipeCleaner } from './recipeCleaner.js';
 import { YoutubeVideoService } from './youtubeVideoService.js';
 import { getYoutubeScrapClient } from '../mcp/youtube-scrap-client.js';
+import { YoutubeRecipeParser } from './youtubeRecipeParser.js';
 
 export interface YoutubeSearchResult {
   videoId: string;
@@ -50,6 +51,7 @@ const RECIPE_PREFIX = 'recipe_yt_';
 export class YoutubeImportService {
   private videoService: YoutubeVideoService;
   private recipeCleaner: RecipeCleaner;
+  private recipeParser: YoutubeRecipeParser;
 
   constructor() {
     this.assertEnv();
@@ -57,6 +59,7 @@ export class YoutubeImportService {
     this.recipeCleaner = new RecipeCleaner(
       process.env.OPENAI_API_KEY || ''
     );
+    this.recipeParser = new YoutubeRecipeParser();
   }
 
   /**
@@ -150,8 +153,12 @@ export class YoutubeImportService {
       console.log('[YouTube Service] Fetching top comments for ingredient info...');
       const comments = await this.videoService.getTopComments(videoId, 5);
       let ingredientsFromComments = '';
+      let firstCommentText = '';
 
       if (comments && comments.length > 0) {
+        // Store first comment (often pinned with full recipe)
+        firstCommentText = comments[0]?.snippet?.topLevelComment?.snippet?.textDisplay || '';
+
         // Look for comments that might contain ingredients (often in pinned/top comments)
         for (const comment of comments) {
           const commentText = comment.snippet?.topLevelComment?.snippet?.textDisplay || '';
@@ -213,9 +220,39 @@ export class YoutubeImportService {
 
       await this.saveRecipe(recipeId, rawData, video);
 
-      const cleaned = await this.recipeCleaner.cleanAndPlanRecipe(
-        recipeId
-      );
+      // 🎯 NEW LOGIC: Try parsing recipe from description/comments first
+      console.log('[YouTube Service] Attempting to parse structured recipe...');
+
+      let parsedRecipe = null;
+
+      // Priority 1: Try parsing from first comment (often pinned with full recipe)
+      if (firstCommentText) {
+        parsedRecipe = this.recipeParser.parseRecipe(firstCommentText, 'comment');
+        if (parsedRecipe) {
+          console.log('✅ [YouTube Service] Successfully parsed recipe from comment!');
+        }
+      }
+
+      // Priority 2: Try parsing from description if comment parsing failed
+      if (!parsedRecipe && videoContent.description) {
+        parsedRecipe = this.recipeParser.parseRecipe(videoContent.description, 'description');
+        if (parsedRecipe) {
+          console.log('✅ [YouTube Service] Successfully parsed recipe from description!');
+        }
+      }
+
+      let cleaned;
+
+      if (parsedRecipe) {
+        // Use parsed recipe directly (no OpenAI processing)
+        parsedRecipe.title = title; // Use YouTube video title
+        cleaned = await this.saveParsedRecipe(recipeId, parsedRecipe);
+        console.log(`💰 [YouTube Service] Saved recipe without OpenAI processing (cost saved!)`);
+      } else {
+        // Fallback: Use OpenAI to process raw data
+        console.log('⚠️ [YouTube Service] Could not parse structured recipe, falling back to OpenAI...');
+        cleaned = await this.recipeCleaner.cleanAndPlanRecipe(recipeId);
+      }
 
       return {
         recipeId,
@@ -368,6 +405,78 @@ export class YoutubeImportService {
 
     // If 3+ patterns match, likely an ingredient list
     return matchCount >= 3;
+  }
+
+  /**
+   * Save parsed recipe directly to cleaned_recipes table (no OpenAI processing)
+   */
+  private async saveParsedRecipe(recipeId: string, parsedRecipe: any): Promise<any> {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Format ingredients as markdown list
+      const ingredientsList = parsedRecipe.ingredients
+        .map((ing: any) => {
+          const unit = ing.unit || '';
+          return `- ${ing.name} ${ing.amount}${unit}`;
+        })
+        .join('\n');
+
+      // Format steps as numbered list with duration if available
+      const stepsList = parsedRecipe.steps
+        .map((step: any) => {
+          const duration = step.duration ? ` (${step.duration})` : '';
+          return `${step.stepNumber}. ${step.instruction}${duration}`;
+        })
+        .join('\n\n');
+
+      // Format tips if available
+      const tipsList = parsedRecipe.tips && parsedRecipe.tips.length > 0
+        ? '\n\n## 팁\n' + parsedRecipe.tips.map((tip: string) => `- ${tip}`).join('\n')
+        : '';
+
+      // Combine into full recipe text
+      const fullRecipe = `## 재료\n${ingredientsList}\n\n## 조리법\n${stepsList}${tipsList}`;
+
+      // Insert into cleaned_recipes
+      const result = await client.query(
+        `INSERT INTO cleaned_recipes (
+          recipe_id, title, servings, cook_time, difficulty,
+          ingredients, steps, tips, full_recipe,
+          created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+        RETURNING id, title`,
+        [
+          recipeId,
+          parsedRecipe.title,
+          parsedRecipe.servings || DEFAULT_SERVINGS,
+          parsedRecipe.cookTime || DEFAULT_COOK_TIME,
+          DEFAULT_DIFFICULTY,
+          JSON.stringify(parsedRecipe.ingredients),
+          JSON.stringify(parsedRecipe.steps),
+          parsedRecipe.tips && parsedRecipe.tips.length > 0
+            ? JSON.stringify(parsedRecipe.tips)
+            : null,
+          fullRecipe,
+        ]
+      );
+
+      await client.query('COMMIT');
+
+      console.log(`✅ [YouTube Service] Saved parsed recipe to cleaned_recipes (ID: ${result.rows[0].id})`);
+
+      return {
+        id: result.rows[0].id,
+        title: result.rows[0].title,
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error('[YouTube Service] Failed to save parsed recipe:', error);
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 }
 
