@@ -362,6 +362,12 @@ IMPORTANT INSTRUCTIONS:
   * "몇 단계 있어?" → Use totalSteps
   * "X단계는 뭐야?" → Find that step in the process array
 - For step navigation, use the appropriate functions (navigate_next_step, navigate_previous_step, navigate_to_step)
+- **CRITICAL: After calling navigate_next_step, navigate_previous_step, or navigate_to_step, you MUST immediately provide guidance about the new step**
+- When the user agrees to move to the next step (e.g., "넘어가", "다음으로", "좋아", "응"), and you call navigate_next_step:
+  * After the function executes successfully, you MUST immediately explain the new step
+  * Example: "좋아요, 다음 단계로 넘어갈게요. 이제 [새 단계 설명]을 해주세요."
+  * Do NOT remain silent after step navigation - always provide guidance about the new step
+- This applies to ALL step navigation scenarios, whether the user explicitly requests it or agrees to your suggestion
 - **TIMER INSTRUCTIONS (중요!)**:
   - ⚠️ **절대로 타이머를 자동으로 시작하지 마세요!** 항상 사용자에게 먼저 물어보세요.
   - 타이머가 필요한 단계(TIMER REQUIRED 표시)에서는 **반드시 먼저 사용자에게 확인**하세요:
@@ -939,6 +945,9 @@ IMPORTANT:
             // 🆕 즉시 응답 생성 요청
             const createResponse = {
               type: 'response.create',
+              response: {
+                modalities: ['audio', 'text'],
+              },
             };
             this.sendToOpenAI(createResponse);
             console.log('📤 [RealtimeServiceV3] Response creation requested after step change');
