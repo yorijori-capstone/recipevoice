@@ -8,6 +8,7 @@ import dotenv from 'dotenv';
 import cors from 'cors';
 import recipeRoutes from './routes/recipes.js';
 import cookingV3Routes, { getCookingServiceV3 } from './routes/cookingV3.js';
+import youtubeRoutes from './routes/youtube.js';
 
 dotenv.config();
 
@@ -25,6 +26,9 @@ app.use('/api/recipes', recipeRoutes);
 
 // Cooking mode API routes (V3: MCP Tool Calling)
 app.use('/api/cooking/v3', cookingV3Routes);  // v2 → v3로 변경
+
+// YouTube API routes
+app.use('/api/youtube', youtubeRoutes);
 
 const PORT = parseInt(process.env.PORT || '3001', 10);
 const HOST = '0.0.0.0'; // Listen on all network interfaces
