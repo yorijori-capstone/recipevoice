@@ -87,7 +87,7 @@ export class RealtimeServiceV3 extends EventEmitter {
       const session = this.session;
       if (session) {
         const updatedPrompt = this.generateSystemPrompt(session);
-        this.sendSessionUpdate(updatedPrompt, true); // 🆕 Skip implicit response creation for background updates
+        this.sendSessionUpdate(updatedPrompt, false); // 🆕 Background update: do not reset VAD state
         console.log(`[RealtimeServiceV3] ✅ AI context updated with timer state`);
       }
     }
@@ -382,7 +382,7 @@ IMPORTANT:
     }
   }
 
-  private async sendSessionUpdate(customPrompt?: string, skipResponseCreation: boolean = false): Promise<void> {
+  private async sendSessionUpdate(customPrompt?: string, updateVAD: boolean = true): Promise<void> {
     const session = this.session;
 
     const systemPrompt =
@@ -391,17 +391,20 @@ IMPORTANT:
         ? this.generateSystemPrompt(session)
         : 'You are a helpful Korean cooking assistant.');
 
-    // 🔧 VAD 설정 강화: 덜 민감하게 + 인터럽트 지원
-    const turnDetection =
-      this.vadMode === 'server_vad'
-        ? {
-          type: 'server_vad',
-          threshold: 0.90,            // 민감도 조절
-          prefix_padding_ms: 200,     // 음성 시작 전 기다림
-          silence_duration_ms: 300,  // 0.3초 침묵 후 종료
-          create_response: !skipResponseCreation,      // 🆕 배경 업데이트 시 자동 응답 생성 방지
-        }
-        : null;
+    // 🔧 VAD 설정: updateVAD가 true일 때만 설정 포함
+    let turnDetection = undefined;
+    if (updateVAD) {
+      turnDetection =
+        this.vadMode === 'server_vad'
+          ? {
+            type: 'server_vad',
+            threshold: 0.90,            // 민감도 조절
+            prefix_padding_ms: 200,     // 음성 시작 전 기다림
+            silence_duration_ms: 300,  // 0.3초 침묵 후 종료
+            create_response: true,      // 자동 응답 생성
+          }
+          : null;
+    }
 
     // 🆕 Phase 3: Get MCP tools if available
     let tools: any[] = [];
@@ -428,7 +431,7 @@ IMPORTANT:
       toolChoice = 'none';
     }
 
-    const sessionUpdate = {
+    const sessionUpdate: any = {
       type: 'session.update',
       session: {
         modalities: ['text', 'audio'],
@@ -441,18 +444,21 @@ IMPORTANT:
           language: 'ko',
           prompt: '한국어 요리 대화. 다음, 이전, 타이머, 시작, 안녕',  // 🆕 Whisper 힌트
         },
-        turn_detection: turnDetection,
         tools,
         tool_choice: toolChoice,
         max_response_output_tokens: "inf",  // 🆕 응답 길이 제한
       },
     };
 
+    // Only include turn_detection if explicitly requested (to avoid resetting VAD state)
+    if (updateVAD) {
+      sessionUpdate.session.turn_detection = turnDetection;
+    }
+
     this.sendToOpenAI(sessionUpdate);
-    console.log(
-      `📤 Session updated (VAD: ${this.vadMode}, Tools: ${tools.length}, MCP: ${this.mcpClient ? 'enabled' : 'disabled'})`
-    );
+    console.log(`📤 Session updated (VAD: ${updateVAD ? (turnDetection ? 'server_vad' : 'none') : 'unchanged'}, Tools: ${tools.length}, MCP: ${this.mcpClient ? 'enabled' : 'disabled'})`);
   }
+
 
   // ==========================================================================
   // Audio & Text Input
