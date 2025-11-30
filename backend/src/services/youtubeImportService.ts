@@ -1,7 +1,7 @@
 import { pool } from '../db/pool.js';
 import { RecipeCleaner } from './recipeCleaner.js';
-import { VideoService } from 'zubeid-youtube-mcp-server/dist/services/video.js';
-import { TranscriptService } from 'zubeid-youtube-mcp-server/dist/services/transcript.js';
+import { YoutubeVideoService } from './youtubeVideoService.js';
+import { getYoutubeScrapClient } from '../mcp/youtube-scrap-client.js';
 
 export interface YoutubeSearchResult {
   videoId: string;
@@ -48,14 +48,12 @@ const LANGUAGE_FALLBACK = 'ko';
 const RECIPE_PREFIX = 'recipe_yt_';
 
 export class YoutubeImportService {
-  private videoService: InstanceType<typeof VideoService>;
-  private transcriptService: InstanceType<typeof TranscriptService>;
+  private videoService: YoutubeVideoService;
   private recipeCleaner: RecipeCleaner;
 
   constructor() {
     this.assertEnv();
-    this.videoService = new VideoService();
-    this.transcriptService = new TranscriptService();
+    this.videoService = new YoutubeVideoService();
     this.recipeCleaner = new RecipeCleaner(
       process.env.OPENAI_API_KEY || ''
     );
@@ -66,7 +64,8 @@ export class YoutubeImportService {
    */
   async searchVideos(
     query: string,
-    limit = 5
+    limit = 5,
+    captionFilter = true
   ): Promise<YoutubeSearchResult[]> {
     if (!query || query.trim().length < 2) {
       throw new YoutubeImportError(
@@ -80,6 +79,7 @@ export class YoutubeImportService {
       const items = await this.videoService.searchVideos({
         query: query.trim(),
         maxResults: Math.min(Math.max(limit, 1), 10),
+        videoCaptionFilter: captionFilter,
       });
 
       return (items || [])
@@ -128,37 +128,88 @@ export class YoutubeImportService {
       );
     }
 
-    const language =
-      request.language?.trim() ||
-      process.env.YOUTUBE_TRANSCRIPT_LANG ||
-      LANGUAGE_FALLBACK;
     const recipeId = `${RECIPE_PREFIX}${videoId}`;
 
     try {
-      const video = await this.videoService.getVideo({
-        videoId,
-        parts: ['snippet', 'contentDetails', 'statistics'],
+      // First, get basic video info from YouTube Data API
+      const videoInfo = await this.videoService.searchVideos({
+        query: videoId,
+        maxResults: 1,
       });
 
-      if (!video) {
-        throw new YoutubeImportError(
-          'VIDEO_NOT_FOUND',
-          404,
-          '해당 영상을 찾을 수 없습니다.'
-        );
+      let title = 'Unknown Title';
+      let channelTitle = 'YouTube Creator';
+
+      if (videoInfo && videoInfo.length > 0) {
+        const snippet = videoInfo[0].snippet || {};
+        title = snippet.title || title;
+        channelTitle = snippet.channelTitle || channelTitle;
       }
 
-      const transcriptPayload = await this.transcriptService.getTranscript({
-        videoId,
-        language,
-      });
+      // Get top comments to extract recipe ingredients
+      console.log('[YouTube Service] Fetching top comments for ingredient info...');
+      const comments = await this.videoService.getTopComments(videoId, 5);
+      let ingredientsFromComments = '';
 
-      const rawData = this.buildRawData(
-        video,
-        transcriptPayload?.transcript || [],
-        language,
-        request.searchQuery
-      );
+      if (comments && comments.length > 0) {
+        // Look for comments that might contain ingredients (often in pinned/top comments)
+        for (const comment of comments) {
+          const commentText = comment.snippet?.topLevelComment?.snippet?.textDisplay || '';
+          // Check if comment contains ingredient-like patterns (quantities, food items)
+          if (this.looksLikeIngredientList(commentText)) {
+            ingredientsFromComments = commentText;
+            console.log('[YouTube Service] Found ingredient information in comments');
+            break;
+          }
+        }
+      }
+
+      // Use youtube-scrap-mcp to get complete video content including transcript
+      console.log('[YouTube Service] Using youtube-scrap-mcp to fetch video content...');
+      const youtubeScrapClient = await getYoutubeScrapClient();
+      const videoContent = await youtubeScrapClient.getVideoContent(videoId);
+
+      console.log('[YouTube Service] Successfully fetched video content from youtube-scrap-mcp');
+
+      // Use API title if scrap-mcp failed to get it
+      if (videoContent.title === 'Unknown Title' || !videoContent.title) {
+        videoContent.title = title;
+      }
+      if (videoContent.channelTitle === 'YouTube Creator' || !videoContent.channelTitle) {
+        videoContent.channelTitle = channelTitle;
+      }
+
+      // Build raw data from youtube-scrap-mcp result
+      const rawData = {
+        videoId: videoContent.videoId,
+        title: videoContent.title,
+        description: videoContent.description,
+        channelTitle: videoContent.channelTitle,
+        channelId: videoContent.channelId,
+        duration: videoContent.duration,
+        publishedAt: videoContent.publishedAt,
+        thumbnails: videoContent.thumbnails,
+        language: request.language || LANGUAGE_FALLBACK,
+        transcript: videoContent.transcript,
+        statistics: videoContent.statistics,
+        searchQuery: request.searchQuery || null,
+        retrievedAt: new Date().toISOString(),
+        source: 'youtube-scrap-mcp',
+        ingredientsFromComments: ingredientsFromComments || null,
+      };
+
+      // Create a video object for saveRecipe compatibility
+      const video = {
+        id: videoContent.videoId,
+        snippet: {
+          title: videoContent.title,
+          channelTitle: videoContent.channelTitle,
+          defaultAudioLanguage: request.language || 'ko',
+        },
+        contentDetails: {
+          duration: videoContent.duration,
+        },
+      };
 
       await this.saveRecipe(recipeId, rawData, video);
 
@@ -211,39 +262,6 @@ export class YoutubeImportService {
         'YOUTUBE_API_KEY가 설정되어 있지 않습니다.'
       );
     }
-  }
-
-  private buildRawData(
-    video: any,
-    transcript: YoutubeTranscriptSegment[],
-    language: string,
-    searchQuery?: string
-  ) {
-    const snippet = video.snippet || {};
-    const thumbnails = snippet.thumbnails || {};
-    const stats = video.statistics || {};
-
-    const thumbnailList = Object.keys(thumbnails).map((quality) => ({
-      quality,
-      url: thumbnails[quality]?.url,
-    }));
-
-    return {
-      videoId: video.id,
-      title: snippet.title,
-      description: snippet.description,
-      channelTitle: snippet.channelTitle,
-      channelId: snippet.channelId,
-      duration: video.contentDetails?.duration || null,
-      publishedAt: snippet.publishedAt,
-      thumbnails: thumbnailList,
-      language,
-      transcript,
-      statistics: stats,
-      searchQuery: searchQuery || null,
-      retrievedAt: new Date().toISOString(),
-      source: 'youtube-mcp-server',
-    };
   }
 
   private async saveRecipe(
@@ -316,6 +334,40 @@ export class YoutubeImportService {
       Math.round(hours * 60 + minutes + seconds / 60)
     );
     return `${totalMinutes}분`;
+  }
+
+  /**
+   * Check if text looks like an ingredient list
+   * Common patterns: quantities (g, ml, 큰술, 작은술), ingredient names
+   */
+  private looksLikeIngredientList(text: string): boolean {
+    if (!text || text.length < 20) {
+      return false;
+    }
+
+    // Korean ingredient patterns
+    const koreanIngredientPatterns = [
+      /\d+g/i,           // 100g
+      /\d+ml/i,          // 200ml
+      /\d+큰술/,         // 2큰술
+      /\d+작은술/,       // 1작은술
+      /\d+개/,           // 3개
+      /\d+컵/,           // 1컵
+      /\d+T/i,           // 2T (tablespoon)
+      /\d+t/i,           // 1t (teaspoon)
+      /\[.*\]/,          // [재료], [분량] etc
+    ];
+
+    // Count how many patterns match
+    let matchCount = 0;
+    for (const pattern of koreanIngredientPatterns) {
+      if (pattern.test(text)) {
+        matchCount++;
+      }
+    }
+
+    // If 3+ patterns match, likely an ingredient list
+    return matchCount >= 3;
   }
 }
 

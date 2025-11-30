@@ -494,7 +494,7 @@ router.post('/recommend', async (req, res) => {
 
 /**
  * DELETE /api/recipes/:recipeId
- * Delete a recipe (AI-generated only)
+ * Delete a recipe (AI-generated or YouTube-imported only)
  */
 router.delete('/:recipeId', async (req, res) => {
   try {
@@ -502,11 +502,11 @@ router.delete('/:recipeId', async (req, res) => {
 
     console.log(`[Recipe API] Delete request for: ${recipeId}`);
 
-    // Safety check: Only allow deletion of AI-generated recipes
-    if (!recipeId.startsWith('recipe_gen_')) {
+    // Safety check: Only allow deletion of AI-generated or YouTube-imported recipes
+    if (!recipeId.startsWith('recipe_gen_') && !recipeId.startsWith('recipe_yt_')) {
       return res.status(403).json({
         error: 'Cannot delete original recipes',
-        message: 'Only AI-generated recipes can be deleted'
+        message: 'Only AI-generated or YouTube-imported recipes can be deleted'
       });
     }
 

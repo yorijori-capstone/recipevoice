@@ -17,15 +17,16 @@ function getYoutubeService(): YoutubeImportService {
 }
 
 /**
- * GET /api/youtube/search?query=<keyword>&limit=5
+ * GET /api/youtube/search?query=<keyword>&limit=5&captionFilter=true
  */
 router.get('/search', async (req, res) => {
   console.log('[YouTube API] /search endpoint hit with query:', req.query);
   try {
     const query = (req.query.query as string) || (req.query.q as string) || '';
     const limit = parseInt((req.query.limit as string) || '5', 10);
-    console.log('[YouTube API] Calling searchVideos with:', { query, limit });
-    const results = await getYoutubeService().searchVideos(query, limit);
+    const captionFilter = req.query.captionFilter === 'true';
+    console.log('[YouTube API] Calling searchVideos with:', { query, limit, captionFilter });
+    const results = await getYoutubeService().searchVideos(query, limit, captionFilter);
     console.log('[YouTube API] Search successful, found', results.length, 'videos');
 
     res.json({
@@ -60,13 +61,16 @@ router.get('/search', async (req, res) => {
  * }
  */
 router.post('/import', async (req, res) => {
+  console.log('[YouTube API] /import endpoint hit with body:', req.body);
   try {
     const { videoId, language, searchQuery } = req.body || {};
+    console.log('[YouTube API] Importing video:', { videoId, language, searchQuery });
     const result = await getYoutubeService().importVideo({
       videoId,
       language,
       searchQuery,
     });
+    console.log('[YouTube API] Import successful:', result);
 
     res.json({
       success: true,
