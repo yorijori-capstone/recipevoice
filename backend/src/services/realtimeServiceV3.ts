@@ -44,6 +44,13 @@ export class RealtimeServiceV3 extends EventEmitter {
     totalTime: number;
   } | null = null;
 
+  // 🆕 재연결 관련 필드
+  private reconnectAttempts: number = 0;
+  private maxReconnectAttempts: number = 5;
+  private reconnectDelay: number = 1000; // 1초
+  private reconnectTimer: NodeJS.Timeout | null = null;
+  private shouldReconnect: boolean = true; // 수동 disconnect 시 false로 설정
+
   constructor(config: RealtimeConfig) {
     super();
     this.apiKey = config.apiKey;
@@ -265,6 +272,10 @@ IMPORTANT INSTRUCTIONS:
   - 사용자가 "아니", "괜찮아", "필요없어" 등 거절하면 타이머 없이 진행하세요
   - 사용자가 직접 "타이머 시작", "타이머 켜줘" 등을 말하면 바로 start_timer 호출
   - "타이머 멈춰", "타이머 정지" 등을 말하면 stop_timer 호출
+  - **타이머가 실행 중일 때 사용자가 "다음 단계", "다음으로", "다음" 등을 말하면**:
+    1. 먼저 stop_timer 함수를 호출하여 타이머를 중지하세요
+    2. 그 다음 navigate_next_step 함수를 호출하여 다음 단계로 이동하세요
+    3. 사용자에게 "타이머를 중지하고 다음 단계로 넘어갈게요"라고 안내하세요
 - Stay focused on the current cooking step, but use full recipe context for better answers
 - **Only process Korean language inputs** - 한국어 입력만 처리합니다
 
@@ -324,6 +335,7 @@ IMPORTANT:
 
       this.ws.on('open', () => {
         console.log('✅ Connected to OpenAI Realtime API (V3)');
+        this.reconnectAttempts = 0; // 재연결 성공 시 카운터 리셋
         this.sendSessionUpdate();
         resolve();
       });
@@ -347,6 +359,25 @@ IMPORTANT:
         console.log(
           `🔌 Disconnected from OpenAI Realtime API (code: ${code}, reason: ${reason || 'none'})`
         );
+        
+        // 🆕 자동 재연결 로직
+        if (this.shouldReconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
+          this.reconnectAttempts++;
+          const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1); // Exponential backoff
+          console.log(`🔄 Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts}) in ${delay}ms...`);
+          
+          this.reconnectTimer = setTimeout(async () => {
+            try {
+              await this.connect();
+            } catch (error) {
+              console.error('Reconnection failed:', error);
+            }
+          }, delay);
+        } else if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+          console.error('❌ Max reconnection attempts reached. Giving up.');
+          this.emit('reconnect_failed');
+        }
+        
         this.emit('close');
       });
     });
@@ -385,9 +416,9 @@ IMPORTANT:
       this.vadMode === 'server_vad'
         ? {
             type: 'server_vad',
-            threshold: 0.85,            // 민감도 조절
-            prefix_padding_ms: 300,     // 음성 시작 전 기다림
-            silence_duration_ms: 1500,  // 500 → 1500 (1.5초 침묵 후 종료) - 반복 방지
+            threshold: 0.90,            // 민감도 조절
+            prefix_padding_ms: 200,     // 음성 시작 전 기다림
+            silence_duration_ms: 300,  // 0.5초 침묵 후 종료
             create_response: true,      // 자동 응답 생성
           }
         : null;
@@ -898,6 +929,11 @@ IMPORTANT:
   }
 
   public disconnect(): void {
+    this.shouldReconnect = false; // 수동 disconnect 시 재연결 방지
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     if (this.ws) {
       this.ws.close();
       this.ws = null;
