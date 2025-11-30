@@ -64,7 +64,9 @@ export function CookingMode() {
     // Cleanup on unmount
     return () => {
       endSession();
-      sessionInitializedRef.current = false; // Reset for next mount
+      // 🔧 React StrictMode에서 cleanup이 즉시 호출되므로 ref를 리셋하지 않음
+      // 실제 언마운트 시에만 리셋되도록 하려면 다른 방법 필요
+      // 하지만 StrictMode에서는 cleanup이 두 번 호출되므로 ref 리셋 제거
     };
   }, [recipeId]); // 원래대로 recipeId만 의존성
 

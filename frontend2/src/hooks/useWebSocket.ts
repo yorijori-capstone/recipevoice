@@ -122,14 +122,12 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
             break;
 
           case 'assistant_transcript_done':
+            // 🔧 delta로 이미 메시지가 추가되었으므로 done에서는 추가하지 않음
+            // 단지 완료 플래그만 업데이트하여 중복 말풍선 방지
             if (currentTranscriptRef.current) {
-              setTranscripts(prev => [...prev, {
-                role: 'assistant',
-                text: currentTranscriptRef.current,
-                timestamp: new Date()
-              }]);
-              currentTranscriptRef.current = '';
+              console.log('[useWebSocket] Assistant transcript completed:', currentTranscriptRef.current);
             }
+            currentTranscriptRef.current = '';
             // 🆕 응답 완료 후 다음 응답은 새 응답
             isNewResponseRef.current = true;
             break;
