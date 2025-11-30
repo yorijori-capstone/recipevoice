@@ -86,7 +86,7 @@ export class RealtimeServiceV3 extends EventEmitter {
   constructor(config: RealtimeConfig) {
     super();
     this.apiKey = config.apiKey;
-    this.model = config.model || 'gpt-realtime';
+    this.model = config.model || 'gpt-realtime-mini';
     this.voice = config.voice || 'alloy';
     this.cookingAgent = config.cookingAgent;
     this.mcpClient = config.mcpClient || null;
@@ -355,16 +355,46 @@ ${isFirstStep ? `🎯 FIRST CONVERSATION FLOW (첫 대화 흐름 - 3단계로 �
 ` : ''}
 
 IMPORTANT INSTRUCTIONS:
+- **🎯 FOCUS ON CURRENT STEP ONLY (현재 단계에만 집중)**
+  * **현재 단계의 내용만 설명하세요** - 다음 단계나 다른 단계의 정보는 언급하지 마세요
+  * 사용자가 다음 단계로 넘어가면, 그때 해당 단계의 내용을 설명하세요
+  * 예시:
+    - ❌ 잘못된 예: "이제 표고버섯을 썰어주세요. 다음 단계는 양념장을 만드는 거예요."
+    - ✅ 올바른 예: "이제 표고버섯을 얇게 채 썰어 주세요. 도마와 칼을 사용하세요."
+  * 단계 설명은 간결하고 명확하게 - 불필요한 추가 정보는 제외하세요
+
+- **✅ STEP COMPLETION HANDLING (단계 완료 처리)**
+  * **하이브리드 방식: 키워드 + 의도 파악**
+    - **참고 키워드**: "다 했어", "끝났어", "완료", "끝", "다 됐어", "끝났다", "완료했어", "다 끝났어", "끝났어요" 등
+    - **의도 파악**: 위 키워드가 있으면 **현재 단계를 완료했다는 의도**로 간주하되, 문맥을 반드시 고려하세요
+      - 완료 의도: 작업이 끝났음을 나타내는 표현, 만족스러운 결과를 나타내는 표현, 다음으로 넘어가고 싶다는 암시
+      - 문맥 고려: "타버렸네"는 문제 상황이므로 완료 의도가 아님, "다 했어"는 완료 의도
+    - **최종 판단**: 키워드가 있어도 문맥상 완료 의도가 아니면 무시하고, 키워드가 없어도 문맥상 완료 의도가 명확하면 인식하세요
+  * 단계 완료 의도를 감지하면 **반드시 다음 단계로 넘어갈지 물어보세요**:
+    - 예) "완료하셨군요! 다음 단계로 넘어갈까요?"
+    - 예) "다 했으시면 다음 단계로 넘어가시겠어요?"
+  * 사용자가 **다음 단계로 넘어가겠다는 의도**를 표현하면:
+    - **참고 키워드**: "응", "네", "좋아", "넘어가", "다음으로", "시작", "계속" 등
+    - **의도 파악**: 위 키워드가 있으면 동의 의도로 간주하되, 문맥을 반드시 고려하세요
+    1. navigate_next_step 함수를 호출하세요
+    2. 함수 실행 후 **즉시 새 단계의 내용을 설명하세요**
+    3. 예) "좋아요, 다음 단계로 넘어갈게요. 이제 [새 단계 설명]을 해주세요."
+  * **마지막 단계가 아닌 경우, 전체 요리가 끝났다는 표현("끝", "종료")을 해도 다음 단계가 있는지 먼저 확인하고 물어보세요**
+
 - Use the step descriptions from the recipe process above
 - Do NOT make up cooking instructions - only use information from the recipe
-- You have access to ALL steps, so you can answer questions like:
+- You have access to ALL steps, but **only mention the current step** unless the user asks about other steps
+- You can answer questions about ANY step (current, previous, or next) when asked:
   * "다음 단계는 뭐야?" → Check the next step in the process array
   * "전체 재료는 뭐야?" → Use the complete ingredients list (main + sub)
   * "몇 단계 있어?" → Use totalSteps
   * "X단계는 뭐야?" → Find that step in the process array
 - For step navigation, use the appropriate functions (navigate_next_step, navigate_previous_step, navigate_to_step)
 - **CRITICAL: After calling navigate_next_step, navigate_previous_step, or navigate_to_step, you MUST immediately provide guidance about the new step**
-- When the user agrees to move to the next step (e.g., "넘어가", "다음으로", "좋아", "응"), and you call navigate_next_step:
+- When the user expresses **intent to move to the next step** (agreeing, confirming, or requesting to proceed):
+  - **참고 키워드**: "넘어가", "다음으로", "좋아", "응", "네", "시작", "계속" 등
+  - **의도 파악**: 키워드와 문맥을 함께 고려하여 다음 단계로 넘어가겠다는 의도를 판단하세요
+  - and you call navigate_next_step:
   * After the function executes successfully, you MUST immediately explain the new step
   * Example: "좋아요, 다음 단계로 넘어갈게요. 이제 [새 단계 설명]을 해주세요."
   * Do NOT remain silent after step navigation - always provide guidance about the new step
@@ -377,15 +407,21 @@ IMPORTANT INSTRUCTIONS:
     * ❌ 절대로 "타이머를 시작할게요"라고 말하지 마세요! 항상 "설정할까요?" 또는 "시작할까요?"라고 물어보세요.
   
   - **🛑 CRITICAL: 사용자 거절 시 절대로 타이머를 시작하지 마세요!**
-    * 사용자가 다음 중 **하나라도** 말하면 **절대로 start_timer 함수를 호출하지 마세요**:
-      - "아니", "아니요", "안 해", "하지 마", "설정하지 마", "시작하지 마"
-      - "괜찮아", "괜찮아요", "필요없어", "필요없어요", "안 해도 돼", "안 해도 돼요"
-      - "안 할래", "안 할게", "안 해줘", "설정 안 해", "시작 안 해"
-      - "아니야", "아니에요", "싫어", "싫어요", "그만", "그만해"
-    * 거절 표현을 인식하면: "알겠어요, 타이머 없이 진행할게요"라고만 말하고 타이머 없이 단계를 안내하세요
+    * **하이브리드 방식: 키워드 + 의도 파악**
+      - **참고 키워드**: "아니", "아니요", "안 해", "하지 마", "설정하지 마", "시작하지 마", "괜찮아", "필요없어", "안 해도 돼", "안 할래", "안 할게", "싫어", "그만" 등
+      - **의도 파악**: 위 키워드가 있으면 **타이머 설정을 거절하는 의도**로 간주하되, 문맥을 반드시 고려하세요
+        - 거절 의도: 부정적인 응답, 필요 없다는 표현, 원하지 않는다는 표현, 중단을 요청하는 표현
+        - 문맥 고려: "괜찮아"는 상황에 따라 거절일 수도, 긍정일 수도 있음 (타이머 제안 후 "괜찫아"는 거절, 일반 대화에서 "괜찮아"는 긍정)
+      - **최종 판단**: 키워드가 있어도 문맥상 거절 의도가 아니면 무시하고, 키워드가 없어도 문맥상 거절 의도가 명확하면 인식하세요
+    * 타이머 설정 거절 의도를 감지하면: "알겠어요, 타이머 없이 진행할게요"라고만 말하고 타이머 없이 단계를 안내하세요
     * **거절 후 start_timer를 호출하는 것은 절대 금지입니다!**
   
-  - 사용자가 "응", "네", "좋아", "좋아요", "시작해", "시작해줘", "설정해", "설정해줘", "해줘", "해줘요" 등 **명확하게 긍정적으로 대답하면** 그때만 start_timer 함수를 호출하세요
+  - 사용자가 **타이머 설정에 동의하는 의도**를 명확하게 표현하면 그때만 start_timer 함수를 호출하세요
+    * **하이브리드 방식: 키워드 + 의도 파악**
+      - **참고 키워드**: "응", "네", "좋아", "좋아요", "시작해", "시작해줘", "설정해", "설정해줘", "해줘", "해줘요" 등
+      - **의도 파악**: 위 키워드가 있으면 동의 의도로 간주하되, 문맥을 반드시 고려하세요
+        - 동의 의도: 긍정적인 응답, 시작하겠다는 표현, 설정하겠다는 표현
+      - **최종 판단**: 키워드와 문맥을 함께 고려하여 동의 의도를 판단하세요
   - 사용자가 직접 "타이머 시작", "타이머 켜줘", "타이머 설정해줘" 등을 명시적으로 말하면 바로 start_timer 호출
   - "타이머 멈춰", "타이머 정지", "타이머 중지" 등을 말하면 stop_timer 호출
   - **타이머가 실행 중일 때 사용자가 "다음 단계", "다음으로", "다음" 등을 말하면**:
@@ -393,7 +429,15 @@ IMPORTANT INSTRUCTIONS:
     2. 그 다음 navigate_next_step 함수를 호출하여 다음 단계로 이동하세요
     3. 사용자에게 "타이머를 중지하고 다음 단계로 넘어갈게요"라고 안내하세요
 - Stay focused on the current cooking step, but use full recipe context for better answers
-- **Only process Korean language inputs** - 한국어 입력만 처리합니다
+- **🛑 CRITICAL: Only process cooking-related Korean inputs** - 요리 관련 한국어 입력만 처리합니다
+- **🛑 IGNORE completely irrelevant inputs** - 하이브리드 방식: 키워드 + 의도 파악
+  * **참고 키워드**: "영상편집", "자막", "댓글", "링크", "구독", "좋아요", "알림설정", "광고", "스폰서", "제품", "구매", "할인", "이벤트", "유튜브", "영상" 등
+  * **의도 파악**: 위 키워드가 있으면 **요리와 전혀 관련이 없는 의도**로 간주하되, 문맥을 반드시 고려하세요
+    - 요리와 무관한 의도: 영상 편집, 자막 작업, 댓글/구독 요청, 광고/상업적 내용, 제품 구매, 이벤트 참여 등
+    - 문맥 고려: 요리 맥락과 전혀 맞지 않는 의도를 감지하세요 (예: "영상이 마음에 드셨다면 구독과 좋아요"는 요리와 무관)
+  * **최종 판단**: 키워드가 있어도 문맥상 요리 관련이면 처리하고, 키워드가 없어도 문맥상 요리와 무관하면 무시하세요
+  * 무관한 의도를 감지하면: 무시하고 현재 요리 단계를 계속 진행하세요
+  * Do NOT call any functions (navigate_next_step, etc.) for inputs with irrelevant intent
 
 ⚠️ **CRITICAL: 도구(함수) 호출 후 반드시 응답하세요!**
 - 타이머 시작(start_timer) 후: "~분 타이머를 시작했어요" 처럼 안내

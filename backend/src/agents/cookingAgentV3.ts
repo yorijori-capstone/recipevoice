@@ -113,7 +113,7 @@ export class CookingAgentV3 extends EventEmitter {
         session: session,
         cookingAgent: this,
         mcpClient: this.mcpClient || undefined,
-        model: 'gpt-realtime', // Use specific model
+        model: 'gpt-realtime-mini', // Use specific model
         voice: 'alloy'
       });
 
@@ -202,7 +202,7 @@ export class CookingAgentV3 extends EventEmitter {
         session: session,
         cookingAgent: this,
         mcpClient: this.mcpClient || undefined,
-        model: 'gpt-realtime',
+        model: 'gpt-realtime-mini',
         voice: 'alloy'
       });
 
