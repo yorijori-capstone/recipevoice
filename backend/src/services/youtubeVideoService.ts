@@ -44,6 +44,27 @@ export class YoutubeVideoService {
   }
 
   /**
+   * Get full video details including complete description
+   */
+  async getVideoDetails(videoId: string): Promise<any> {
+    try {
+      const response = await this.youtube.videos.list({
+        part: ['snippet', 'contentDetails', 'statistics'],
+        id: [videoId],
+      });
+
+      if (response.data.items && response.data.items.length > 0) {
+        return response.data.items[0];
+      }
+
+      return null;
+    } catch (error) {
+      console.error(`Failed to get video details for ${videoId}:`, error);
+      throw new Error(`Failed to get video details: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
    * Get top comments from a video
    * Retrieves the first pinned comment or top comments
    */

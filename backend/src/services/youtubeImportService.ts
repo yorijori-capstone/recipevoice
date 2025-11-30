@@ -134,19 +134,24 @@ export class YoutubeImportService {
     const recipeId = `${RECIPE_PREFIX}${videoId}`;
 
     try {
-      // First, get basic video info from YouTube Data API
-      const videoInfo = await this.videoService.searchVideos({
-        query: videoId,
-        maxResults: 1,
-      });
+      // Get full video details including complete description
+      console.log('[YouTube Service] Fetching full video details...');
+      const videoDetails = await this.videoService.getVideoDetails(videoId);
 
       let title = 'Unknown Title';
       let channelTitle = 'YouTube Creator';
+      let description = '';
 
-      if (videoInfo && videoInfo.length > 0) {
-        const snippet = videoInfo[0].snippet || {};
+      if (videoDetails) {
+        const snippet = videoDetails.snippet || {};
         title = snippet.title || title;
         channelTitle = snippet.channelTitle || channelTitle;
+        description = snippet.description || ''; // Full description from videos.list
+        console.log('[YouTube Service] Retrieved FULL description from YouTube Data API');
+        console.log('[YouTube Service] Description length:', description.length, 'characters');
+        console.log('[YouTube Service] Description preview:', description.substring(0, 200) + '...');
+      } else {
+        console.warn('[YouTube Service] Could not fetch video details, video may not exist');
       }
 
       // Get top comments to extract recipe ingredients
@@ -187,10 +192,11 @@ export class YoutubeImportService {
       }
 
       // Build raw data from youtube-scrap-mcp result
+      // Use YouTube Data API description if available (more reliable)
       const rawData = {
         videoId: videoContent.videoId,
         title: videoContent.title,
-        description: videoContent.description,
+        description: description || videoContent.description, // ← YouTube Data API description 우선
         channelTitle: videoContent.channelTitle,
         channelId: videoContent.channelId,
         duration: videoContent.duration,
@@ -201,12 +207,13 @@ export class YoutubeImportService {
         statistics: videoContent.statistics,
         searchQuery: request.searchQuery || null,
         retrievedAt: new Date().toISOString(),
-        source: 'youtube-scrap-mcp',
+        source: 'youtube-data-api+scrap-mcp',
         ingredientsFromComments: ingredientsFromComments || null,
       };
 
       // Create a video object for saveRecipe compatibility
-      const video = {
+      // Use videoDetails if available for more accurate data
+      const video = videoDetails || {
         id: videoContent.videoId,
         snippet: {
           title: videoContent.title,
@@ -234,8 +241,10 @@ export class YoutubeImportService {
       }
 
       // Priority 2: Try parsing from description if comment parsing failed
-      if (!parsedRecipe && videoContent.description) {
-        parsedRecipe = this.recipeParser.parseRecipe(videoContent.description, 'description');
+      // Use YouTube Data API description (more reliable than youtube-scrap-mcp)
+      const descriptionToUse = description || videoContent.description;
+      if (!parsedRecipe && descriptionToUse) {
+        parsedRecipe = this.recipeParser.parseRecipe(descriptionToUse, 'description');
         if (parsedRecipe) {
           console.log('✅ [YouTube Service] Successfully parsed recipe from description!');
         }
