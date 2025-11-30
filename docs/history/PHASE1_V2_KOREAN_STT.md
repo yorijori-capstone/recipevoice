@@ -111,7 +111,7 @@ IMPORTANT:
 ```
 
 **효과**:
-- GPT-4o-realtime에게 한국어 출력 명시
+- gpt-realtime에게 한국어 출력 명시
 - 시스템 레벨에서 언어 제한
 
 ---

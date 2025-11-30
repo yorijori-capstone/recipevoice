@@ -8,7 +8,7 @@
 
 ### V2 문제점:
 ```
-음성 입력 → GPT-4o-realtime → LangChain (GPT-4o-mini) → Tool → DB
+음성 입력 → gpt-realtime → LangChain (GPT-4o-mini) → Tool → DB
               ↓                      ↓                    ↓
           TTS 생성            Intent Detection      상태 변경
                                    ↓
@@ -25,7 +25,7 @@
 
 ### V3 해결책:
 ```
-음성 입력 → GPT-4o-realtime (Tool Calling) → MCP Server → DB
+음성 입력 → gpt-realtime (Tool Calling) → MCP Server → DB
               ↓                                    ↓         ↓
           TTS 생성                          Tool 실행    상태 변경
                                                           ↓
@@ -360,7 +360,7 @@ export class CookingServiceV2 {
       cookingAgent: this.cookingAgent,
       langChainAgent: this.langChainAgent,
       mcpClient: this.mcpClient || undefined,  // 🆕
-      model: 'gpt-realtime-2024-10-01',
+      model: 'gpt-realtime',
       voice: 'alloy',
     });
   }
@@ -419,7 +419,7 @@ const setupAgentHandlers = async (sessionId: string) => {
 ```
 1. 사용자 음성 입력
    ↓
-2. GPT-4o-realtime (Whisper STT, language='ko')
+2. gpt-realtime (Whisper STT, language='ko')
    ↓ (한국어 필터 통과)
 3. Realtime API Intent Detection
    ↓ (Tool Calling 결정)

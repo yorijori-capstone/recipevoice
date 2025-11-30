@@ -8,6 +8,25 @@ import { EventEmitter } from 'events';
 import { CookingAgentV3, CookingSession } from '../agents/cookingAgentV3.js';
 import { MCPClientManager } from '../mcp/mcp-client.js';
 
+// ============================================================================
+// Configuration Constants
+// ============================================================================
+const VAD_CONFIG = {
+  THRESHOLD: 0.90,            // Voice activity detection sensitivity (0-1)
+  PREFIX_PADDING_MS: 200,     // Audio buffer before speech starts (ms)
+  SILENCE_DURATION_MS: 300,   // Silence duration to end turn (ms)
+} as const;
+
+const AUDIO_CONFIG = {
+  SAMPLE_RATE: 24000,         // Audio sample rate (Hz)
+  FORMAT: 'pcm16' as const,   // Audio format
+} as const;
+
+const RECONNECT_CONFIG = {
+  MAX_ATTEMPTS: 5,            // Maximum reconnection attempts
+  INITIAL_DELAY_MS: 1000,     // Initial reconnection delay (ms)
+} as const;
+
 interface RealtimeConfig {
   apiKey: string;
   session: CookingSession; // 🆕 Session specific
@@ -44,11 +63,22 @@ export class RealtimeServiceV3 extends EventEmitter {
     remainingTime: number;
     totalTime: number;
   } | null = null;
+  
+  // 🆕 이전 타이머 상태 추적 (변경 감지용)
+  private previousTimerState: {
+    isRunning: boolean;
+    isCompleted: boolean;
+  } | null = null;
+
+  // 🆕 System prompt caching (performance optimization)
+  private staticPromptCache: string | null = null;
+  private lastCachedPrompt: string | null = null;
+  private lastDynamicKey: string = '';
 
   // 🆕 재연결 관련 필드
   private reconnectAttempts: number = 0;
-  private maxReconnectAttempts: number = 5;
-  private reconnectDelay: number = 1000; // 1초
+  private maxReconnectAttempts: number = RECONNECT_CONFIG.MAX_ATTEMPTS;
+  private reconnectDelay: number = RECONNECT_CONFIG.INITIAL_DELAY_MS;
   private reconnectTimer: NodeJS.Timeout | null = null;
   private shouldReconnect: boolean = true; // 수동 disconnect 시 false로 설정
 
@@ -79,25 +109,89 @@ export class RealtimeServiceV3 extends EventEmitter {
     remainingTime: number;
     totalTime: number;
   }): void {
+    // 🆕 상태 변경 감지: 시작/중지/완료 시에만 세션 업데이트
+    const stateChanged = 
+      !this.previousTimerState || 
+      this.previousTimerState.isRunning !== state.isRunning ||
+      this.previousTimerState.isCompleted !== state.isCompleted;
+    
+    // 이전 상태 업데이트 (다음 비교를 위해)
+    this.previousTimerState = {
+      isRunning: state.isRunning,
+      isCompleted: state.isCompleted,
+    };
+    
     this.timerState = state;
     console.log(`[RealtimeServiceV3] ⏱️ Timer state updated:`, state);
 
-    // Update AI context with new timer state
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+    // 🆕 상태가 실제로 변경된 경우에만 세션 업데이트 (시작/중지/완료 시)
+    if (stateChanged && this.ws && this.ws.readyState === WebSocket.OPEN) {
       const session = this.session;
       if (session) {
         const updatedPrompt = this.generateSystemPrompt(session);
         this.sendSessionUpdate(updatedPrompt, false); // 🆕 Background update: do not reset VAD state
-        console.log(`[RealtimeServiceV3] ✅ AI context updated with timer state`);
+        console.log(`[RealtimeServiceV3] ✅ AI context updated with timer state change (isRunning: ${state.isRunning}, isCompleted: ${state.isCompleted})`);
       }
+    } else if (!stateChanged) {
+      // 상태 변경이 없으면 로그만 (remainingTime만 변경된 경우)
+      console.log(`[RealtimeServiceV3] ⏱️ Timer state updated (no significant change, remainingTime: ${state.remainingTime})`);
     }
   }
 
   /**
-   * Generate system prompt from cleaned recipe data
+   * Helper: Format timer info string
+   */
+  private formatTimerInfo(): string {
+    if (!this.timerState) {
+      return 'no_timer';
+    }
+    if (this.timerState.isCompleted) {
+      return 'completed';
+    }
+    if (this.timerState.isRunning) {
+      return `running_${this.timerState.remainingTime}`;
+    }
+    return 'idle';
+  }
+
+  /**
+   * Generate system prompt from cleaned recipe data (with caching)
    * 🆕 Uses full planning_result with complete recipe context
+   * 🚀 Performance: Caches static content, only regenerates when step/timer changes
    */
   private generateSystemPrompt(session: CookingSession): string {
+    // Generate dynamic key based on things that change
+    const dynamicKey = `${session.currentStepIndex}:${this.formatTimerInfo()}`;
+
+    // Cache hit - return cached prompt
+    if (dynamicKey === this.lastDynamicKey && this.lastCachedPrompt) {
+      return this.lastCachedPrompt;
+    }
+
+    // Cache miss - regenerate prompt
+    console.log(`[RealtimeServiceV3] 🔄 Regenerating system prompt (key changed: ${this.lastDynamicKey} → ${dynamicKey})`);
+    const fullPrompt = this.generateSystemPromptInternal(session);
+
+    // 🆕 Prompt 길이 모니터링 (성능 디버깅)
+    const promptLength = fullPrompt.length;
+    const estimatedTokens = Math.ceil(promptLength / 4); // 대략적인 토큰 수 추정
+    if (promptLength > 10000) {
+      console.warn(`[RealtimeServiceV3] ⚠️ Long system prompt detected: ${promptLength} chars (~${estimatedTokens} tokens). This may affect performance.`);
+    } else {
+      console.log(`[RealtimeServiceV3] ✅ System prompt generated: ${promptLength} chars (~${estimatedTokens} tokens)`);
+    }
+
+    // Update cache
+    this.lastDynamicKey = dynamicKey;
+    this.lastCachedPrompt = fullPrompt;
+
+    return fullPrompt;
+  }
+
+  /**
+   * Internal: actual prompt generation logic (called only on cache miss)
+   */
+  private generateSystemPromptInternal(session: CookingSession): string {
     // 🆕 Get full planning_result for complete context
     const planningResult = session.planning_result;
 
@@ -151,17 +245,34 @@ export class RealtimeServiceV3 extends EventEmitter {
       `${ing.name} ${ing.amount}${ing.unit}${ing.usage ? ` (${ing.usage})` : ''}`
     ).join(', ') || '없음';
 
-    // 🆕 전체 process 배열을 구조화된 형식으로 생성
+    // 🆕 최적화: 전체 단계는 간략하게, 현재 단계 주변만 상세하게
+    // 🚀 성능 최적화: 단계가 많을수록 더 간략하게 표시하여 prompt 길이 제한
+    const currentIdx = session.currentStepIndex;
+    const contextWindow = process.length > 15 ? 2 : 3; // 단계가 많으면 주변 2단계만, 적으면 3단계
+    const startIdx = Math.max(0, currentIdx - contextWindow);
+    const endIdx = Math.min(process.length, currentIdx + contextWindow + 1);
+    
     const allStepsText = process.map((step, idx) => {
-      const isCurrent = idx === session.currentStepIndex;
+      const isCurrent = idx === currentIdx;
+      const isNearby = idx >= startIdx && idx < endIdx;
       const marker = isCurrent ? '👉' : '  ';
-      return `${marker} Step ${step.step_index}: [${step.phase}] ${step.action_type}
+      
+      // 현재 단계 주변만 상세하게, 나머지는 간략하게
+      if (isNearby) {
+        return `${marker} Step ${step.step_index}: [${step.phase}] ${step.action_type}
      ${step.description}
      ${step.ingredients_needed?.length > 0 ? `재료: ${step.ingredients_needed.join(', ')}` : ''}
      ${step.tools_needed?.length > 0 ? `도구: ${step.tools_needed.join(', ')}` : ''}
      ${step.heat_level ? `불 조절: ${step.heat_level}` : ''}
      ${step.timer_seconds ? `시간: ${step.timer_seconds}초` : ''}
      ${step.tip ? `팁: ${step.tip}` : ''}`;
+      } else {
+        // 간략 버전: 단계 번호, 설명, 재료 정보 (도구/불/타이머 등은 생략하여 길이 절약)
+        const ingredients = step.ingredients_needed?.length > 0 
+          ? ` (재료: ${step.ingredients_needed.join(', ')})` 
+          : '';
+        return `${marker} Step ${step.step_index}: ${step.description}${ingredients}`;
+      }
     }).join('\n\n');
 
     // 🆕 첫 대화 여부 판단
@@ -204,6 +315,7 @@ Action Type: ${currentProcessStep.action_type}
 Description: ${currentProcessStep.description}
 Heat Level: ${currentProcessStep.heat_level || 'N/A'}
 Timer: ${timerInfo}
+${timerRequired ? `⚠️ **IMPORTANT**: This step requires a timer. You MUST ask the user first: "타이머를 설정할까요?" or "타이머를 시작할까요?" before calling start_timer. Do NOT start the timer automatically.` : ''}
 Ingredients Needed: ${currentProcessStep.ingredients_needed?.join(', ') || '없음'}
 Tools Needed: ${currentProcessStep.tools_needed?.join(', ') || '없음'}
 ${currentProcessStep.tip ? `Tip: ${currentProcessStep.tip}` : ''}
@@ -214,6 +326,9 @@ ${currentProcessStep.tip ? `Tip: ${currentProcessStep.tip}` : ''}
 
 1. Guide users through cooking steps using the step descriptions above
 2. Answer questions about ANY step (current, previous, or next) using the complete recipe information
+   - For steps shown in detail: Use the detailed information provided (ingredients, tools, heat level, timer, etc.)
+   - For steps shown briefly: Use the step description and ingredients_needed information to answer questions accurately
+   - If specific step information is not available, refer to the complete ingredient list and recipe context
 3. Execute commands (next, previous, timer, etc.) through function calling
 4. Keep responses concise and natural
 5. **ALWAYS respond in Korean ONLY** - 절대 한국어로만 대답하세요
@@ -248,12 +363,15 @@ IMPORTANT INSTRUCTIONS:
   * "X단계는 뭐야?" → Find that step in the process array
 - For step navigation, use the appropriate functions (navigate_next_step, navigate_previous_step, navigate_to_step)
 - **TIMER INSTRUCTIONS (중요!)**:
-  - 타이머가 필요한 단계에서는 **먼저 사용자에게 확인**하세요:
-    예) "이 단계는 2분이 필요해요. 타이머를 설정할까요?"
-  - 사용자가 "응", "네", "좋아", "시작해", "설정해" 등 **긍정적으로 대답하면** start_timer 함수를 호출하세요
-  - 사용자가 "아니", "괜찮아", "필요없어" 등 거절하면 타이머 없이 진행하세요
-  - 사용자가 직접 "타이머 시작", "타이머 켜줘" 등을 말하면 바로 start_timer 호출
-  - "타이머 멈춰", "타이머 정지" 등을 말하면 stop_timer 호출
+  - ⚠️ **절대로 타이머를 자동으로 시작하지 마세요!** 항상 사용자에게 먼저 물어보세요.
+  - 타이머가 필요한 단계(TIMER REQUIRED 표시)에서는 **반드시 먼저 사용자에게 확인**하세요:
+    * 예) "이 단계는 ${timerSeconds ? `${Math.floor(timerSeconds / 60)}분` : '타이머'}가 필요해요. 타이머를 설정할까요?"
+    * 예) "2분 타이머가 필요합니다. 타이머를 시작할까요?"
+    * ❌ 절대로 "타이머를 시작할게요"라고 말하지 마세요! 항상 "설정할까요?" 또는 "시작할까요?"라고 물어보세요.
+  - 사용자가 "응", "네", "좋아", "시작해", "설정해", "해줘" 등 **긍정적으로 대답하면** 그때 start_timer 함수를 호출하세요
+  - 사용자가 "아니", "괜찮아", "필요없어", "안 해도 돼" 등 거절하면 타이머 없이 진행하세요
+  - 사용자가 직접 "타이머 시작", "타이머 켜줘", "타이머 설정해줘" 등을 명시적으로 말하면 바로 start_timer 호출
+  - "타이머 멈춰", "타이머 정지", "타이머 중지" 등을 말하면 stop_timer 호출
   - **타이머가 실행 중일 때 사용자가 "다음 단계", "다음으로", "다음" 등을 말하면**:
     1. 먼저 stop_timer 함수를 호출하여 타이머를 중지하세요
     2. 그 다음 navigate_next_step 함수를 호출하여 다음 단계로 이동하세요
@@ -382,81 +500,107 @@ IMPORTANT:
     }
   }
 
-  private async sendSessionUpdate(customPrompt?: string, updateVAD: boolean = true): Promise<void> {
-    const session = this.session;
+  /**
+   * Build VAD configuration
+   */
+  private buildVADConfig(updateVAD: boolean): any {
+    if (!updateVAD) return undefined;
 
-    const systemPrompt =
-      customPrompt ||
-      (session
-        ? this.generateSystemPrompt(session)
-        : 'You are a helpful Korean cooking assistant.');
-
-    // 🔧 VAD 설정: updateVAD가 true일 때만 설정 포함
-    let turnDetection = undefined;
-    if (updateVAD) {
-      turnDetection =
-        this.vadMode === 'server_vad'
-          ? {
-            type: 'server_vad',
-            threshold: 0.90,            // 민감도 조절
-            prefix_padding_ms: 200,     // 음성 시작 전 기다림
-            silence_duration_ms: 300,  // 0.3초 침묵 후 종료
-            create_response: true,      // 자동 응답 생성
-          }
-          : null;
-    }
-
-    // 🆕 Phase 3: Get MCP tools if available
-    let tools: any[] = [];
-    let toolChoice: string | { type: string } = 'auto';
-
-    if (this.mcpClient && session) {
-      try {
-        const mcpTools = await this.mcpClient.getToolDefinitions();
-        tools = mcpTools.map((tool) => ({
-          type: 'function',
-          name: tool.name,
-          description: tool.description,
-          parameters: tool.inputSchema,
-        }));
-        toolChoice = 'auto'; // Let GPT decide when to use tools
-        console.log(`[RealtimeServiceV3] Loaded ${tools.length} MCP tools`);
-      } catch (error) {
-        console.error('[RealtimeServiceV3] Failed to load MCP tools:', error);
-        tools = [];
-        toolChoice = 'none';
+    return this.vadMode === 'server_vad'
+      ? {
+        type: 'server_vad',
+        threshold: VAD_CONFIG.THRESHOLD,
+        prefix_padding_ms: VAD_CONFIG.PREFIX_PADDING_MS,
+        silence_duration_ms: VAD_CONFIG.SILENCE_DURATION_MS,
+        create_response: true,
       }
-    } else {
-      // No MCP client or no session - disable tools
-      toolChoice = 'none';
+      : null;
+  }
+
+  /**
+   * Load MCP tools
+   */
+  private async loadMCPTools(): Promise<{ tools: any[]; toolChoice: string }> {
+    if (!this.mcpClient || !this.session) {
+      return { tools: [], toolChoice: 'none' };
     }
 
-    const sessionUpdate: any = {
+    try {
+      const mcpTools = await this.mcpClient.getToolDefinitions();
+      const tools = mcpTools.map((tool) => ({
+        type: 'function',
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.inputSchema,
+      }));
+      console.log(`[RealtimeServiceV3] Loaded ${tools.length} MCP tools`);
+      return { tools, toolChoice: 'auto' };
+    } catch (error) {
+      console.error('[RealtimeServiceV3] Failed to load MCP tools:', error);
+      return { tools: [], toolChoice: 'none' };
+    }
+  }
+
+  /**
+   * Build session update payload
+   */
+  private buildSessionUpdatePayload(
+    systemPrompt: string,
+    turnDetection: any,
+    tools: any[],
+    toolChoice: string
+  ): any {
+    const payload: any = {
       type: 'session.update',
       session: {
         modalities: ['text', 'audio'],
         instructions: systemPrompt,
         voice: this.voice,
-        input_audio_format: 'pcm16',
-        output_audio_format: 'pcm16',
+        input_audio_format: AUDIO_CONFIG.FORMAT,
+        output_audio_format: AUDIO_CONFIG.FORMAT,
         input_audio_transcription: {
           model: 'whisper-1',
           language: 'ko',
-          prompt: '한국어 요리 대화. 다음, 이전, 타이머, 시작, 안녕',  // 🆕 Whisper 힌트
+          prompt: '한국어 요리 대화. 다음, 이전, 타이머, 시작, 안녕',
         },
         tools,
         tool_choice: toolChoice,
-        max_response_output_tokens: "inf",  // 🆕 응답 길이 제한
+        max_response_output_tokens: "inf",
       },
     };
 
-    // Only include turn_detection if explicitly requested (to avoid resetting VAD state)
-    if (updateVAD) {
-      sessionUpdate.session.turn_detection = turnDetection;
+    if (turnDetection !== undefined) {
+      payload.session.turn_detection = turnDetection;
     }
 
-    this.sendToOpenAI(sessionUpdate);
-    console.log(`📤 Session updated (VAD: ${updateVAD ? (turnDetection ? 'server_vad' : 'none') : 'unchanged'}, Tools: ${tools.length}, MCP: ${this.mcpClient ? 'enabled' : 'disabled'})`);
+    return payload;
+  }
+
+  /**
+   * Send session update to OpenAI (refactored)
+   */
+  private async sendSessionUpdate(customPrompt?: string, updateVAD: boolean = true): Promise<void> {
+    // 🆕 WebSocket 연결 상태 확인
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.warn('[RealtimeServiceV3] ⚠️ Cannot update session: WebSocket not connected');
+      return;
+    }
+
+    try {
+      const session = this.session;
+      const systemPrompt = customPrompt ||
+        (session ? this.generateSystemPrompt(session) : 'You are a helpful Korean cooking assistant.');
+
+      const turnDetection = this.buildVADConfig(updateVAD);
+      const { tools, toolChoice } = await this.loadMCPTools();
+      const sessionUpdate = this.buildSessionUpdatePayload(systemPrompt, turnDetection, tools, toolChoice);
+
+      this.sendToOpenAI(sessionUpdate);
+      console.log(`📤 Session updated (VAD: ${updateVAD ? (turnDetection ? 'server_vad' : 'none') : 'unchanged'}, Tools: ${tools.length})`);
+    } catch (error) {
+      console.error('[RealtimeServiceV3] Error in sendSessionUpdate:', error);
+      throw error; // 상위로 전파하여 호출자가 처리할 수 있도록
+    }
   }
 
 
@@ -658,7 +802,7 @@ IMPORTANT:
           rejected: false,
         });
 
-        // 🆕 Phase 4: LangChain removed - GPT-4o-realtime handles tool calling directly
+        // 🆕 Phase 4: LangChain removed - GPT-realtime handles tool calling directly
         // User transcript is sent to GPT, which decides if tool call is needed
         break;
 
@@ -775,6 +919,7 @@ IMPORTANT:
 
           // 🆕 Reset timer state on step change
           this.timerState = null;
+          this.previousTimerState = null; // 🆕 이전 상태도 리셋
 
           // 🆕 Emit timer reset event for frontend synchronization
           this.emit('timer_reset', {
@@ -783,13 +928,49 @@ IMPORTANT:
             reason: 'step_changed'
           });
 
-          const updatedPrompt = this.generateSystemPrompt(this.session);
-          await this.sendSessionUpdate(updatedPrompt, false); // ✅ Context-only update, no VAD reset
-          console.log('✅ Session context updated for new step');
+          try {
+            const updatedPrompt = this.generateSystemPrompt(this.session);
+            await this.sendSessionUpdate(updatedPrompt, false); // ✅ Context-only update, no VAD reset
+            console.log('✅ Session context updated for new step');
+            
+            // 🆕 세션 업데이트 완료 후 짧은 지연 (OpenAI가 세션 업데이트를 처리할 시간)
+            await new Promise(resolve => setTimeout(resolve, 100)); // 100ms 대기
+            
+            // 🆕 즉시 응답 생성 요청
+            const createResponse = {
+              type: 'response.create',
+            };
+            this.sendToOpenAI(createResponse);
+            console.log('📤 [RealtimeServiceV3] Response creation requested after step change');
+            
+            // 🆕 응답이 없으면 재요청 (침묵 방지)
+            const responseCheckTimeout = setTimeout(() => {
+              if (!this.isResponding) {
+                console.warn('[RealtimeServiceV3] ⚠️ No response after 2 seconds, retrying...');
+                this.sendToOpenAI(createResponse);
+              }
+            }, 2000);
+            
+            // 응답이 시작되면 타임아웃 취소
+            const responseCreatedListener = () => {
+              clearTimeout(responseCheckTimeout);
+              this.removeListener('response_created', responseCreatedListener);
+            };
+            this.once('response_created', responseCreatedListener);
+            
+            // navigate_ 툴의 경우 여기서 return하여 아래 response.create 중복 방지
+            return;
+          } catch (error) {
+            console.error('[RealtimeServiceV3] Failed to update session context:', error);
+            // 에러 발생해도 응답 생성은 계속
+            const createResponse = { type: 'response.create' };
+            this.sendToOpenAI(createResponse);
+            return;
+          }
         }
       }
 
-      // Request new response from GPT (AFTER session update to ensure correct context)
+      // Request new response from GPT (다른 툴의 경우)
       const createResponse = {
         type: 'response.create',
       };

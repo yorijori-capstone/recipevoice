@@ -9,6 +9,7 @@ import { useCookingSessionV3 } from '../hooks/useCookingSessionV3';
 import { ProgressBar } from '../components/CookingUI/ProgressBar';
 import { TimerDisplay, TimerDisplayRef } from '../components/CookingUI/TimerDisplay';
 import { VoiceInteraction, VoiceInteractionRef } from '../components/CookingUI/VoiceInteraction';
+import { TTS_DELAYS } from '../config/constants';
 
 export function CookingMode() {
   const { recipeId } = useParams<{ recipeId: string }>();
@@ -28,8 +29,6 @@ export function CookingMode() {
     startSession,
     nextStep,
     previousStep,
-    navigateNext,
-    navigatePrevious,
     endSession,
     updateSessionState,
   } = useCookingSessionV3();
@@ -65,15 +64,24 @@ export function CookingMode() {
       endSession();
       // 🔧 React StrictMode에서 cleanup이 즉시 호출되므로 ref를 리셋하지 않음
     };
-  }, [recipeId]);
+  }, [recipeId, endSession]);
 
-  // UI 버튼 클릭 - 로컬 상태만 변경 (원래 방식)
-  const handleNext = () => {
-    navigateNext();
+  // UI 버튼 클릭 - 이제 서버 API 사용 (AI와 동일한 경로)
+  // 이렇게 하면 currentStepIndex가 단일 진실 공급원이 되어 불일치 방지
+  const handleNext = async () => {
+    try {
+      await nextStep();
+    } catch (err) {
+      console.error('Failed to move to next step:', err);
+    }
   };
 
-  const handlePrevious = () => {
-    navigatePrevious();
+  const handlePrevious = async () => {
+    try {
+      await previousStep();
+    } catch (err) {
+      console.error('Failed to move to previous step:', err);
+    }
   };
 
   const handleVoiceCommand = async (command: string) => {
@@ -147,12 +155,27 @@ export function CookingMode() {
       if (voiceRef.current) {
         voiceRef.current.speakMessage('타이머가 종료되었습니다.');
       }
-    }, 500); // 500ms 지연으로 응답 충돌 방지
+    }, TTS_DELAYS.TIMER_COMPLETE_MS);
+
+    // 🆕 1초 후 다음 단계 안내
+    setTimeout(() => {
+      if (!voiceRef.current || !session) return;
+
+      if (session.viewingStepIndex < session.totalSteps - 1) {
+        // 다음 단계가 있으면
+        voiceRef.current.speakMessage(
+          '다음 단계로 넘어갈까요? "다음"이라고 말씀해주세요!'
+        );
+      } else {
+        // 마지막 단계면
+        voiceRef.current.speakMessage('마지막 단계가 완료되었습니다!');
+      }
+    }, TTS_DELAYS.NEXT_STEP_PROMPT_MS);
 
     // 5초 후 메시지 제거
     setTimeout(() => {
       setTimerCompleteMessage(null);
-    }, 5000);
+    }, TTS_DELAYS.MESSAGE_DISMISS_MS);
   };
 
   const handleTimerStart = () => {

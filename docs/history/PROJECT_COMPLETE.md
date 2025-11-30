@@ -158,7 +158,7 @@ last_project/
 ### 6. LangChain Integration (V2, V3에서 제거됨)
 - Intent Detection (GPT-3.5) - V3에서 MCP Protocol로 대체
 - Tool Execution (자동)
-- Response Generation (GPT-4o-realtime)
+- Response Generation (gpt-realtime)
 
 ### 7. Real-time WebSocket V2
 - LangChain response events
@@ -410,7 +410,7 @@ created_at   TIMESTAMP DEFAULT NOW()
 
 ### 4. GPT Model Selection
 - gpt-5-nano: 빠르고 저렴 (레시피 생성 및 정제)
-- GPT-4o-realtime: 실시간 음성 상호작용
+- gpt-realtime: 실시간 음성 상호작용
 - 적재적소 사용이 중요
 
 ---

@@ -214,7 +214,7 @@ psql -U postgres -d yorijori -c "CREATE INDEX IF NOT EXISTS idx_recipes_raw_data
 
 ### Q: "OpenAI API Error"
 - API Key가 유효한지, 잔액이 충분한지 확인하세요.
-- `gpt-4o-realtime-preview` 모델 접근 권한이 있는지 확인하세요.
+- `gpt-realtime` 모델 접근 권한이 있는지 확인하세요.
 
 ### Q: "WebSocket connection failed"
 - Backend 서버가 3001 포트에서 실행 중인지 확인하세요.

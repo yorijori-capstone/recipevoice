@@ -50,7 +50,7 @@ graph LR
                 ↓
     [WebSocket] → [RealtimeServiceV3]
                 ↓
-         [GPT-4o-realtime] (음성 입출력)
+         [gpt-realtime] (음성 입출력)
                 ↓
          [MCP Tool Calling] (Native Tool Execution)
                 ↓
