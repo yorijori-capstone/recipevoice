@@ -47,6 +47,7 @@ export class RealtimeServiceV3 extends EventEmitter {
 
   // 🆕 인터럽트 처리를 위한 응답 상태 추적
   private isResponding: boolean = false;
+  private hasGeneratedText: boolean = false; // 🆕 텍스트 생성 여부 추적
 
   // 🆕 중복 로그 방지를 위한 필드
   private lastTranscriptItemId: string | null = null;
@@ -248,7 +249,7 @@ export class RealtimeServiceV3 extends EventEmitter {
     // 🆕 최적화: 전체 단계는 간략하게, 현재 단계 주변만 상세하게
     // 🚀 성능 최적화: 단계가 많을수록 더 간략하게 표시하여 prompt 길이 제한
     const currentIdx = session.currentStepIndex;
-    const contextWindow = process.length > 15 ? 2 : 3; // 단계가 많으면 주변 2단계만, 적으면 3단계
+    const contextWindow = process.length > 10 ? 0 : 1; // 단계가 10개 이상이면 현재 단계만, 10개 이하면 주변 1단계
     const startIdx = Math.max(0, currentIdx - contextWindow);
     const endIdx = Math.min(process.length, currentIdx + contextWindow + 1);
     
@@ -374,8 +375,17 @@ IMPORTANT INSTRUCTIONS:
     * 예) "이 단계는 ${timerSeconds ? `${Math.floor(timerSeconds / 60)}분` : '타이머'}가 필요해요. 타이머를 설정할까요?"
     * 예) "2분 타이머가 필요합니다. 타이머를 시작할까요?"
     * ❌ 절대로 "타이머를 시작할게요"라고 말하지 마세요! 항상 "설정할까요?" 또는 "시작할까요?"라고 물어보세요.
-  - 사용자가 "응", "네", "좋아", "시작해", "설정해", "해줘" 등 **긍정적으로 대답하면** 그때 start_timer 함수를 호출하세요
-  - 사용자가 "아니", "괜찮아", "필요없어", "안 해도 돼" 등 거절하면 타이머 없이 진행하세요
+  
+  - **🛑 CRITICAL: 사용자 거절 시 절대로 타이머를 시작하지 마세요!**
+    * 사용자가 다음 중 **하나라도** 말하면 **절대로 start_timer 함수를 호출하지 마세요**:
+      - "아니", "아니요", "안 해", "하지 마", "설정하지 마", "시작하지 마"
+      - "괜찮아", "괜찮아요", "필요없어", "필요없어요", "안 해도 돼", "안 해도 돼요"
+      - "안 할래", "안 할게", "안 해줘", "설정 안 해", "시작 안 해"
+      - "아니야", "아니에요", "싫어", "싫어요", "그만", "그만해"
+    * 거절 표현을 인식하면: "알겠어요, 타이머 없이 진행할게요"라고만 말하고 타이머 없이 단계를 안내하세요
+    * **거절 후 start_timer를 호출하는 것은 절대 금지입니다!**
+  
+  - 사용자가 "응", "네", "좋아", "좋아요", "시작해", "시작해줘", "설정해", "설정해줘", "해줘", "해줘요" 등 **명확하게 긍정적으로 대답하면** 그때만 start_timer 함수를 호출하세요
   - 사용자가 직접 "타이머 시작", "타이머 켜줘", "타이머 설정해줘" 등을 명시적으로 말하면 바로 start_timer 호출
   - "타이머 멈춰", "타이머 정지", "타이머 중지" 등을 말하면 stop_timer 호출
   - **타이머가 실행 중일 때 사용자가 "다음 단계", "다음으로", "다음" 등을 말하면**:
@@ -439,10 +449,42 @@ IMPORTANT:
         },
       });
 
-      this.ws.on('open', () => {
+      this.ws.on('open', async () => {
         console.log('✅ Connected to OpenAI Realtime API (V3)');
         this.reconnectAttempts = 0; // 재연결 성공 시 카운터 리셋
-        this.sendSessionUpdate();
+        
+        try {
+          await this.sendSessionUpdate();
+          
+          // 🆕 session.updated 이벤트를 기다린 후 response.create 호출 (첫 연결 시)
+          await new Promise<void>((resolve) => {
+            const timeout = setTimeout(() => {
+              console.warn('[RealtimeServiceV3] ⚠️ session.updated timeout, proceeding anyway');
+              resolve();
+            }, 2000); // 최대 2초 대기
+            
+            this.once('session_updated', () => {
+              clearTimeout(timeout);
+              console.log('✅ [RealtimeServiceV3] Session updated confirmed, requesting response');
+              resolve();
+            });
+          });
+          
+          // 이제 안전하게 response.create 호출
+          const createResponse = {
+            type: 'response.create',
+            response: {
+              modalities: ['audio', 'text'],
+            },
+          };
+          this.sendToOpenAI(createResponse);
+          console.log('📤 [RealtimeServiceV3] First response creation requested');
+        } catch (error) {
+          console.error('[RealtimeServiceV3] Failed to send session update:', error);
+          reject(error);
+          return;
+        }
+        
         resolve();
       });
 
@@ -567,7 +609,7 @@ IMPORTANT:
         input_audio_transcription: {
           model: 'whisper-1',
           language: 'ko',
-          prompt: '한국어 요리 대화. 다음, 이전, 타이머, 시작, 안녕',
+          prompt: '한국어 요리 레시피', // 간단하게 변경 (오인식 방지)
         },
         tools,
         tool_choice: toolChoice,
@@ -616,9 +658,12 @@ IMPORTANT:
 
   public sendAudio(audioData: string): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      console.warn('⚠️ WebSocket not ready');
+      console.warn('⚠️ [RealtimeServiceV3] WebSocket not ready');
       return;
     }
+
+    // 🆕 오디오 전송 로그 제거 (과도한 로그 방지)
+    // console.log('🎤 [RealtimeServiceV3] Sending audio chunk to OpenAI, length:', audioData?.length || 0);
 
     const audioAppend = {
       type: 'input_audio_buffer.append',
@@ -742,6 +787,7 @@ IMPORTANT:
       case 'response.created':
         console.log('🔄 Response started');
         this.isResponding = true;
+        this.hasGeneratedText = false; // 🆕 응답 시작 시 텍스트 생성 플래그 초기화
         // 🆕 새 응답 시작 시 이전 오디오 완전히 정리 (음성 겹침 방지)
         this.audioQueue = [];
         this.emit('response_created', event);
@@ -783,7 +829,8 @@ IMPORTANT:
       case 'conversation.item.input_audio_transcription.completed':
         // 🆕 빈 문자열 즉시 필터링 (잡음만 감지된 경우)
         if (!event.transcript || event.transcript.trim().length === 0) {
-          return; // 로그 없이 조용히 무시
+          // 🆕 디버깅 로그 간소화: 빈 전사는 조용히 무시
+          return;
         }
 
         console.log('👤 [USER]:', event.transcript);
@@ -814,6 +861,7 @@ IMPORTANT:
 
       case 'response.audio_transcript.delta':
         // 🔧 [STOP] 태그 감지 제거
+        this.hasGeneratedText = true; // 🆕 텍스트가 생성되었음을 표시
         this.emit('assistant_transcript_delta', {
           delta: event.delta,
           item_id: event.item_id,
@@ -864,7 +912,39 @@ IMPORTANT:
         this.emit('error', event.error);
         break;
 
+      case 'conversation.item.input_audio_transcription.failed':
+        console.error('❌ [RealtimeServiceV3] Transcription failed:', {
+          item_id: event.item_id,
+          error: event.error
+        });
+        
+        // Rate Limit 에러인 경우 특별 처리
+        if (event.error?.message?.includes('429') || 
+            event.error?.message?.includes('Too Many Requests')) {
+          console.warn('⚠️ [RealtimeServiceV3] Whisper API Rate Limit exceeded. Please wait before speaking again.');
+          this.emit('transcription_failed', {
+            item_id: event.item_id,
+            error: event.error,
+            reason: 'rate_limit'
+          });
+        } else {
+          this.emit('transcription_failed', {
+            item_id: event.item_id,
+            error: event.error,
+            reason: 'unknown'
+          });
+        }
+        break;
+
       default:
+        // 🆕 디버깅: 알 수 없는 이벤트 타입 로깅
+        // rate_limits, session 이벤트는 정상이므로 필터링
+        if (event.type && 
+            !event.type.startsWith('response.') && 
+            !event.type.startsWith('rate_limits.') &&
+            !event.type.startsWith('session.')) {
+          console.log('🔍 [DEBUG] Unknown event type:', event.type, JSON.stringify(event, null, 2));
+        }
         break;
     }
   }
@@ -952,13 +1032,21 @@ IMPORTANT:
             this.sendToOpenAI(createResponse);
             console.log('📤 [RealtimeServiceV3] Response creation requested after step change');
             
-            // 🆕 응답이 없으면 재요청 (침묵 방지)
+            // 🆕 응답이 없거나 텍스트가 생성되지 않으면 재요청 (침묵 방지)
             const responseCheckTimeout = setTimeout(() => {
-              if (!this.isResponding) {
-                console.warn('[RealtimeServiceV3] ⚠️ No response after 2 seconds, retrying...');
+              if (!this.hasGeneratedText) {
+                console.warn('[RealtimeServiceV3] ⚠️ No text generated after 1.5 seconds, forcing retry...');
                 this.sendToOpenAI(createResponse);
+                
+                // 🆕 2차 재시도 (1.5초 후)
+                setTimeout(() => {
+                  if (!this.hasGeneratedText) {
+                    console.warn('[RealtimeServiceV3] ⚠️ Still no text generated, final retry...');
+                    this.sendToOpenAI(createResponse);
+                  }
+                }, 1500);
               }
-            }, 2000);
+            }, 1500); // 2초 → 1.5초로 단축
             
             // 응답이 시작되면 타임아웃 취소
             const responseCreatedListener = () => {

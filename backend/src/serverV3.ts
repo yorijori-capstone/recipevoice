@@ -381,14 +381,21 @@ wss.on('connection', (ws: WebSocket) => {
           break;
 
         case 'audio':
+          // 🆕 오디오 전송 로그 제거 (과도한 로그 방지)
+          // console.log('🎤 [Server V3] Audio chunk received, length:', data.audio?.length || 0);
           if (currentSessionId) {
             const service = await getCookingServiceV3();
             // const realtimeService = service.getRealtimeService();
             const agent = service.getCookingAgent();
             const session = agent.getSession(currentSessionId);
             if (session && session.realtimeService) {
+              // console.log('✅ [Server V3] Sending audio to RealtimeService');
               session.realtimeService.sendAudio(data.audio);
+            } else {
+              console.warn('⚠️ [Server V3] No session or realtimeService found');
             }
+          } else {
+            console.warn('⚠️ [Server V3] No currentSessionId for audio');
           }
           break;
 
