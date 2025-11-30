@@ -26,7 +26,7 @@ app.use('/api/recipes', recipeRoutes);
 // Cooking mode API routes (V3: MCP Tool Calling)
 app.use('/api/cooking/v3', cookingV3Routes);  // v2 → v3로 변경
 
-const PORT = process.env.PORT || 3001;
+const PORT = parseInt(process.env.PORT || '3001', 10);
 const HOST = '0.0.0.0'; // Listen on all network interfaces
 const server = app.listen(PORT, HOST, () => {
   console.log(`🚀 Server V3 running on ${HOST}:${PORT}`);
@@ -59,7 +59,7 @@ wss.on('connection', (ws: WebSocket) => {
   // Event Handler References (for cleanup on disconnect)
   // ============================================================================
   type EventHandler = (data: any) => void;
-  
+
   const eventHandlers: {
     realtimeService: Map<string, EventHandler>;
     agent: Map<string, EventHandler>;
@@ -72,14 +72,25 @@ wss.on('connection', (ws: WebSocket) => {
   const cleanupEventHandlers = async () => {
     try {
       const service = await getCookingServiceV3();
-      const realtimeService = service.getRealtimeService();
+      // const realtimeService = service.getRealtimeService(); // Removed
       const agent = service.getCookingAgent();
 
       // Remove RealtimeService listeners
-      eventHandlers.realtimeService.forEach((handler, eventName) => {
-        realtimeService.removeListener(eventName, handler);
-        console.log(`🧹 Removed realtimeService listener: ${eventName}`);
-      });
+      // We need to find the realtime service instance that was used.
+      // Since we store handlers in a Map, we can't easily get the service instance back unless we stored it.
+      // But we can get it from the session if currentSessionId is set.
+
+      if (currentSessionId) {
+        const session = agent.getSession(currentSessionId);
+        if (session && session.realtimeService) {
+          const realtimeService = session.realtimeService;
+
+          eventHandlers.realtimeService.forEach((handler, eventName) => {
+            realtimeService.removeListener(eventName, handler);
+            console.log(`🧹 Removed realtimeService listener: ${eventName}`);
+          });
+        }
+      }
       eventHandlers.realtimeService.clear();
 
       // Remove Agent listeners
@@ -99,11 +110,21 @@ wss.on('connection', (ws: WebSocket) => {
   const setupRealtimeHandlers = async (sessionId: string) => {
     try {
       const service = await getCookingServiceV3();
-      const realtimeService = service.getRealtimeService();
+      // const realtimeService = service.getRealtimeService(); // Removed
       const agent = service.getCookingAgent();
 
-      // Set active session
-      realtimeService.setActiveSession(sessionId);
+      const session = agent.getSession(sessionId);
+      if (!session) {
+        throw new Error(`Session not found: ${sessionId}`);
+      }
+
+      const realtimeService = session.realtimeService;
+      if (!realtimeService) {
+        throw new Error(`RealtimeService not found for session: ${sessionId}`);
+      }
+
+      // Set active session - No longer needed as service is session-specific
+      // realtimeService.setActiveSession(sessionId);
 
       // Connect to OpenAI Realtime API
       if (!realtimeService.isConnected()) {
@@ -234,7 +255,7 @@ wss.on('connection', (ws: WebSocket) => {
     try {
       const service = await getCookingServiceV3();
       const agent = service.getCookingAgent();
-      const realtimeService = service.getRealtimeService();
+      // const realtimeService = service.getRealtimeService(); // Removed global access
 
       // Step changed
       const stepChangedHandler: EventHandler = (data) => {
@@ -252,57 +273,67 @@ wss.on('connection', (ws: WebSocket) => {
       agent.on('step_changed', stepChangedHandler);
       eventHandlers.agent.set('step_changed', stepChangedHandler);
 
-      // Tool executed (MCP)
-      const toolExecutedHandler: EventHandler = (data) => {
-        if (data.sessionId === currentSessionId) {
-          console.log(`[Server V3] Tool executed: ${data.toolName}`, data.result);
+      // We need to attach tool_executed listener to the session's realtime service
+      // But this function setupAgentHandlers is called with sessionId.
+      // So we can get the realtime service from the session.
 
-          ws.send(
-            JSON.stringify({
-              type: 'tool_executed',
-              sessionId: data.sessionId,
-              tool: data.toolName,
-              result: data.result,
-            })
-          );
+      const session = agent.getSession(sessionId);
+      if (session && session.realtimeService) {
+        const realtimeService = session.realtimeService;
 
-          // If navigation tool, also send session state update for UI sync
-          if (data.toolName.startsWith('navigate_') && data.result?.success && currentSessionId) {
-            const session = agent.getSession(currentSessionId);
-            if (session) {
-              ws.send(
-                JSON.stringify({
-                  type: 'session_state_updated',
-                  sessionId: session.sessionId,
-                  currentStepIndex: data.result.current_step_index,
-                  viewingStepIndex: data.result.current_step_index,
-                  totalSteps: data.result.total_steps,
-                  status: session.status,
-                })
-              );
+        // Tool executed (MCP)
+        const toolExecutedHandler: EventHandler = (data) => {
+          // ... same logic ...
+          if (data.sessionId === currentSessionId) {
+            console.log(`[Server V3] Tool executed: ${data.toolName}`, data.result);
+
+            ws.send(
+              JSON.stringify({
+                type: 'tool_executed',
+                sessionId: data.sessionId,
+                tool: data.toolName,
+                result: data.result,
+              })
+            );
+
+            // If navigation tool, also send session state update for UI sync
+            if (data.toolName.startsWith('navigate_') && data.result?.success && currentSessionId) {
+              const session = agent.getSession(currentSessionId);
+              if (session) {
+                ws.send(
+                  JSON.stringify({
+                    type: 'session_state_updated',
+                    sessionId: session.sessionId,
+                    currentStepIndex: data.result.current_step_index,
+                    viewingStepIndex: data.result.current_step_index,
+                    totalSteps: data.result.total_steps,
+                    status: session.status,
+                  })
+                );
+              }
             }
           }
-        }
-      };
-      realtimeService.on('tool_executed', toolExecutedHandler);
-      eventHandlers.realtimeService.set('tool_executed', toolExecutedHandler);
+        };
+        realtimeService.on('tool_executed', toolExecutedHandler);
+        eventHandlers.realtimeService.set('tool_executed', toolExecutedHandler);
 
-      // Timer reset event (step change)
-      const timerResetHandler: EventHandler = (data) => {
-        if (data.sessionId === currentSessionId) {
-          console.log(`[Server V3] Timer reset: step ${data.stepIndex}, reason: ${data.reason}`);
-          ws.send(
-            JSON.stringify({
-              type: 'timer_reset',
-              sessionId: data.sessionId,
-              stepIndex: data.stepIndex,
-              reason: data.reason,
-            })
-          );
-        }
-      };
-      realtimeService.on('timer_reset', timerResetHandler);
-      eventHandlers.realtimeService.set('timer_reset', timerResetHandler);
+        // Timer reset event (step change)
+        const timerResetHandler: EventHandler = (data) => {
+          if (data.sessionId === currentSessionId) {
+            console.log(`[Server V3] Timer reset: step ${data.stepIndex}, reason: ${data.reason}`);
+            ws.send(
+              JSON.stringify({
+                type: 'timer_reset',
+                sessionId: data.sessionId,
+                stepIndex: data.stepIndex,
+                reason: data.reason,
+              })
+            );
+          }
+        };
+        realtimeService.on('timer_reset', timerResetHandler);
+        eventHandlers.realtimeService.set('timer_reset', timerResetHandler);
+      }
 
       // Session ended
       const sessionEndedHandler: EventHandler = (data) => {
@@ -352,41 +383,54 @@ wss.on('connection', (ws: WebSocket) => {
         case 'audio':
           if (currentSessionId) {
             const service = await getCookingServiceV3();
-            const realtimeService = service.getRealtimeService();
-            realtimeService.sendAudio(data.audio);
+            // const realtimeService = service.getRealtimeService();
+            const agent = service.getCookingAgent();
+            const session = agent.getSession(currentSessionId);
+            if (session && session.realtimeService) {
+              session.realtimeService.sendAudio(data.audio);
+            }
           }
           break;
 
         case 'start_streaming':
           if (currentSessionId) {
             const service = await getCookingServiceV3();
-            const realtimeService = service.getRealtimeService();
-            realtimeService.startStreaming();
+            const agent = service.getCookingAgent();
+            const session = agent.getSession(currentSessionId);
+            if (session && session.realtimeService) {
+              session.realtimeService.startStreaming();
+            }
           }
           break;
 
         case 'stop_streaming':
           if (currentSessionId) {
             const service = await getCookingServiceV3();
-            const realtimeService = service.getRealtimeService();
-            realtimeService.stopStreaming();
+            const agent = service.getCookingAgent();
+            const session = agent.getSession(currentSessionId);
+            if (session && session.realtimeService) {
+              session.realtimeService.stopStreaming();
+            }
           }
           break;
 
         case 'set_vad_mode':
           if (currentSessionId) {
             const service = await getCookingServiceV3();
-            const realtimeService = service.getRealtimeService();
-            const mode = data.mode === 'server_vad' ? 'auto' : 'manual';
-            realtimeService.setVADMode(mode);
+            const agent = service.getCookingAgent();
+            const session = agent.getSession(currentSessionId);
+            if (session && session.realtimeService) {
+              const mode = data.mode === 'server_vad' ? 'auto' : 'manual';
+              session.realtimeService.setVADMode(mode);
 
-            ws.send(
-              JSON.stringify({
-                type: 'vad_mode_changed',
-                mode: data.mode,
-              })
-            );
-            console.log(`✅ VAD mode changed to: ${data.mode}`);
+              ws.send(
+                JSON.stringify({
+                  type: 'vad_mode_changed',
+                  mode: data.mode,
+                })
+              );
+              console.log(`✅ VAD mode changed to: ${data.mode}`);
+            }
           }
           break;
 
@@ -394,8 +438,11 @@ wss.on('connection', (ws: WebSocket) => {
           if (currentSessionId && data.text) {
             console.log(`💬 Received text message: ${data.text}`);
             const service = await getCookingServiceV3();
-            const realtimeService = service.getRealtimeService();
-            realtimeService.sendTextMessage(data.text);
+            const agent = service.getCookingAgent();
+            const session = agent.getSession(currentSessionId);
+            if (session && session.realtimeService) {
+              session.realtimeService.sendTextMessage(data.text);
+            }
           }
           break;
 
@@ -404,8 +451,11 @@ wss.on('connection', (ws: WebSocket) => {
           if (currentSessionId && data.timerState) {
             console.log(`⏱️ Timer state update:`, data.timerState);
             const service = await getCookingServiceV3();
-            const realtimeService = service.getRealtimeService();
-            realtimeService.updateTimerState(data.timerState);
+            const agent = service.getCookingAgent();
+            const session = agent.getSession(currentSessionId);
+            if (session && session.realtimeService) {
+              session.realtimeService.updateTimerState(data.timerState);
+            }
           }
           break;
 
@@ -460,10 +510,10 @@ wss.on('connection', (ws: WebSocket) => {
 
   ws.on('close', async (code, reason) => {
     console.log(`👋 Client disconnected (code: ${code}, reason: ${reason || 'none'})`);
-    
+
     // Cleanup all event handlers to prevent memory leaks
     await cleanupEventHandlers();
-    
+
     currentSessionId = null;
   });
 

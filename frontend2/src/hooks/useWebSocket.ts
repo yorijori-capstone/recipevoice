@@ -8,7 +8,7 @@ interface Transcript {
 
 interface UseWebSocketOptions {
   onUserTranscription?: (text: string) => void;
-  onAssistantTranscript?: (text: string, isNewResponse: boolean) => void;  // 🆕 isNewResponse 추가
+  onAssistantTranscript?: (text: string, isNewResponse: boolean) => void;
   onFunctionCall?: (name: string, callId: string, args: any) => void;
   onError?: (error: string) => void;
   // V3 events (MCP Tool Calling)
@@ -26,16 +26,34 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
 
   const wsRef = useRef<WebSocket | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const audioSourceRef = useRef<AudioBufferSourceNode | null>(null); // 🆕 Track current audio source
   const audioQueueRef = useRef<Float32Array[]>([]);
   const isPlayingRef = useRef(false);
   const currentTranscriptRef = useRef<string>('');
-  const isNewResponseRef = useRef<boolean>(true);  // 🆕 새 응답 여부 추적
-  
-  // Store options in ref to avoid stale closures and unnecessary reconnections
+  const isNewResponseRef = useRef<boolean>(true);
+
+  // Store options in ref to avoid stale closures
   const optionsRef = useRef(options);
   useEffect(() => {
     optionsRef.current = options;
   }, [options]);
+
+  // 🆕 Helper to clear audio queue and stop playback
+  const clearAudioQueue = useCallback(() => {
+    // Stop current audio source if playing
+    if (audioSourceRef.current) {
+      try {
+        audioSourceRef.current.stop();
+        audioSourceRef.current.disconnect();
+      } catch (e) {
+        // Ignore errors if already stopped
+      }
+      audioSourceRef.current = null;
+    }
+
+    audioQueueRef.current = [];
+    isPlayingRef.current = false;
+  }, []);
 
   const playAudioQueue = useCallback(async () => {
     if (audioQueueRef.current.length === 0 || !audioContextRef.current) {
@@ -54,7 +72,11 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     source.buffer = audioBuffer;
     source.connect(audioContext.destination);
 
+    // 🆕 Store reference to current source
+    audioSourceRef.current = source;
+
     source.onended = () => {
+      audioSourceRef.current = null; // Clear reference when done
       playAudioQueue();
     };
 
@@ -69,7 +91,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
 
     console.log(`🔌 [useWebSocket] connect() called with sessionId: ${sessionId}`);
     setStatus('connecting');
-    // Dynamic WebSocket URL based on current hostname (works on different networks)
+
     const hostname = window.location.hostname;
     const wsUrl = `ws://${hostname}:3001`;
     console.log(`🔌 [useWebSocket] Connecting to: ${wsUrl}`);
@@ -82,7 +104,6 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
       setIsConnected(true);
       setError(null);
 
-      // Initialize session with context
       if (sessionId) {
         ws.send(JSON.stringify({
           type: 'init_session',
@@ -104,9 +125,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
               text: userText,
               timestamp: new Date()
             }]);
-            // 🆕 사용자가 말하면 다음 AI 응답은 새 응답으로 처리
             isNewResponseRef.current = true;
-            // Call callback if provided
             if (optionsRef.current.onUserTranscription) {
               optionsRef.current.onUserTranscription(userText);
             }
@@ -114,21 +133,17 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
 
           case 'assistant_transcript_delta':
             currentTranscriptRef.current += data.delta;
-            // 🆕 새 응답 여부를 콜백에 전달
             if (optionsRef.current.onAssistantTranscript) {
               optionsRef.current.onAssistantTranscript(currentTranscriptRef.current, isNewResponseRef.current);
-              isNewResponseRef.current = false;  // 첫 delta 이후는 업데이트 모드
+              isNewResponseRef.current = false;
             }
             break;
 
           case 'assistant_transcript_done':
-            // 🔧 delta로 이미 메시지가 추가되었으므로 done에서는 추가하지 않음
-            // 단지 완료 플래그만 업데이트하여 중복 말풍선 방지
             if (currentTranscriptRef.current) {
               console.log('[useWebSocket] Assistant transcript completed:', currentTranscriptRef.current);
             }
             currentTranscriptRef.current = '';
-            // 🆕 응답 완료 후 다음 응답은 새 응답
             isNewResponseRef.current = true;
             break;
 
@@ -140,18 +155,15 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
             }
             break;
 
-          // 🆕 사용자가 말하기 시작하면 AI 오디오 재생 즉시 중단
           case 'speech_started':
-            console.log('🎤 [useWebSocket] User speech started - stopping audio playback');
-            audioQueueRef.current = [];  // 오디오 큐 비우기
-            isPlayingRef.current = false; // 재생 중단
+            console.log('🎤 [useWebSocket] User speech started');
+            // 🔧 User preference: Do NOT stop audio when user speaks. Let AI finish its sentence.
+            // clearAudioQueue(); 
             break;
 
-          // 🆕 새 응답 시작 시 이전 오디오 완전히 정리 (음성 겹침 방지)
           case 'response.created':
             console.log('🔄 [useWebSocket] New response started - clearing audio queue');
-            audioQueueRef.current = [];  // 오디오 큐 비우기
-            isPlayingRef.current = false; // 재생 중단
+            clearAudioQueue(); // 🆕 Use helper
             break;
 
           case 'vad_mode_changed':
@@ -229,7 +241,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
       const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
       audioContextRef.current = new AudioContextClass({ sampleRate: 24000 });
     }
-  }, [playAudioQueue]); // options removed - using optionsRef instead
+  }, [playAudioQueue, clearAudioQueue]);
 
   const disconnect = useCallback(() => {
     console.log('🔌 [useWebSocket] disconnect() called');
@@ -238,13 +250,17 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
       wsRef.current.close();
       wsRef.current = null;
     }
+
+    // 🆕 Cleanup audio
+    clearAudioQueue();
+
     if (audioContextRef.current) {
       audioContextRef.current.close();
       audioContextRef.current = null;
     }
     setStatus('disconnected');
     setIsConnected(false);
-  }, []);
+  }, [clearAudioQueue]);
 
   const sendAudioChunk = useCallback((audioData: string) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -293,7 +309,6 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     }
   }, []);
 
-  // 🆕 Send timer state to backend (for AI context awareness)
   const sendTimerState = useCallback((timerState: {
     isRunning: boolean;
     isCompleted: boolean;

@@ -10,7 +10,8 @@ import { MCPClientManager } from '../mcp/mcp-client.js';
 
 interface RealtimeConfig {
   apiKey: string;
-  cookingAgent: CookingAgentV3;
+  session: CookingSession; // 🆕 Session specific
+  cookingAgent: CookingAgentV3; // Keep for DB updates/logging if needed
   mcpClient?: MCPClientManager;
   model?: string;
   voice?: string;
@@ -24,17 +25,17 @@ export class RealtimeServiceV3 extends EventEmitter {
   private audioQueue: string[] = [];
   private isProcessing: boolean = false;
   private vadMode: 'server_vad' | 'none' = 'server_vad';
-  
+
   // 🆕 인터럽트 처리를 위한 응답 상태 추적
   private isResponding: boolean = false;
-  
+
   // 🆕 중복 로그 방지를 위한 필드
   private lastTranscriptItemId: string | null = null;
 
   // Integration with agents
   private cookingAgent: CookingAgentV3;
   private mcpClient: MCPClientManager | null = null;
-  private currentSessionId: string | null = null;
+  private session: CookingSession; // 🆕 Session instance
 
   // 🆕 Timer state tracking
   private timerState: {
@@ -58,35 +59,16 @@ export class RealtimeServiceV3 extends EventEmitter {
     this.voice = config.voice || 'alloy';
     this.cookingAgent = config.cookingAgent;
     this.mcpClient = config.mcpClient || null;
+    this.session = config.session; // 🆕 Set session
 
-    console.log('[RealtimeServiceV3] Initialized with MCP Tool Calling');
+    console.log(`[RealtimeServiceV3] Initialized for session: ${this.session.sessionId}`);
   }
 
   // ==========================================================================
   // Session Management
   // ==========================================================================
 
-  /**
-   * Set active cooking session
-   */
-  setActiveSession(sessionId: string): void {
-    this.currentSessionId = sessionId;
-    this.timerState = null; // 🆕 Reset timer state on session change
-
-    const session = this.cookingAgent.getSession(sessionId);
-
-    if (session) {
-      // Generate system prompt from cleaned recipe
-      const systemPrompt = this.generateSystemPrompt(session);
-
-      // Update session with new prompt
-      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        this.sendSessionUpdate(systemPrompt);
-      }
-
-      console.log(`[RealtimeServiceV3] Active session set: ${sessionId}`);
-    }
-  }
+  // 🆕 setActiveSession removed - session is immutable for this instance
 
   /**
    * 🆕 Update timer state from frontend
@@ -101,11 +83,11 @@ export class RealtimeServiceV3 extends EventEmitter {
     console.log(`[RealtimeServiceV3] ⏱️ Timer state updated:`, state);
 
     // Update AI context with new timer state
-    if (this.currentSessionId && this.ws && this.ws.readyState === WebSocket.OPEN) {
-      const session = this.cookingAgent.getSession(this.currentSessionId);
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      const session = this.session;
       if (session) {
         const updatedPrompt = this.generateSystemPrompt(session);
-        this.sendSessionUpdate(updatedPrompt);
+        this.sendSessionUpdate(updatedPrompt, true); // 🆕 Skip implicit response creation for background updates
         console.log(`[RealtimeServiceV3] ✅ AI context updated with timer state`);
       }
     }
@@ -118,7 +100,7 @@ export class RealtimeServiceV3 extends EventEmitter {
   private generateSystemPrompt(session: CookingSession): string {
     // 🆕 Get full planning_result for complete context
     const planningResult = session.planning_result;
-    
+
     if (!planningResult) {
       console.warn('[RealtimeServiceV3] No planning_result in session, using fallback');
       // Fallback to basic info if planning_result is missing
@@ -130,10 +112,10 @@ export class RealtimeServiceV3 extends EventEmitter {
     const ingredients = planningResult.ingredients || { main: [], sub: [] };
     const tools = planningResult.tools || [];
     const process = planningResult.process || session.process || [];
-    
+
     // Current step information
     const currentProcessStep = process[session.currentStepIndex];
-    
+
     if (!currentProcessStep) {
       console.warn(`[RealtimeServiceV3] No process step at index ${session.currentStepIndex}`);
       return this.generateFallbackPrompt(session);
@@ -142,7 +124,7 @@ export class RealtimeServiceV3 extends EventEmitter {
     // Timer info with real-time state from frontend
     const timerSeconds = currentProcessStep.timer_seconds;
     const timerRequired = timerSeconds !== null && timerSeconds > 0;
-    
+
     let timerInfo: string;
     if (this.timerState) {
       if (this.timerState.isCompleted) {
@@ -161,11 +143,11 @@ export class RealtimeServiceV3 extends EventEmitter {
     }
 
     // 🆕 재료 목록 생성 (main/sub 구분)
-    const mainIngredients = ingredients.main?.map(ing => 
+    const mainIngredients = ingredients.main?.map(ing =>
       `${ing.name} ${ing.amount}${ing.unit}${ing.notes ? ` (${ing.notes})` : ''}`
     ).join(', ') || '없음';
-    
-    const subIngredients = ingredients.sub?.map(ing => 
+
+    const subIngredients = ingredients.sub?.map(ing =>
       `${ing.name} ${ing.amount}${ing.unit}${ing.usage ? ` (${ing.usage})` : ''}`
     ).join(', ') || '없음';
 
@@ -359,13 +341,13 @@ IMPORTANT:
         console.log(
           `🔌 Disconnected from OpenAI Realtime API (code: ${code}, reason: ${reason || 'none'})`
         );
-        
+
         // 🆕 자동 재연결 로직
         if (this.shouldReconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
           this.reconnectAttempts++;
           const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1); // Exponential backoff
           console.log(`🔄 Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts}) in ${delay}ms...`);
-          
+
           this.reconnectTimer = setTimeout(async () => {
             try {
               await this.connect();
@@ -377,7 +359,7 @@ IMPORTANT:
           console.error('❌ Max reconnection attempts reached. Giving up.');
           this.emit('reconnect_failed');
         }
-        
+
         this.emit('close');
       });
     });
@@ -400,10 +382,8 @@ IMPORTANT:
     }
   }
 
-  private async sendSessionUpdate(customPrompt?: string): Promise<void> {
-    const session = this.currentSessionId
-      ? this.cookingAgent.getSession(this.currentSessionId)
-      : null;
+  private async sendSessionUpdate(customPrompt?: string, skipResponseCreation: boolean = false): Promise<void> {
+    const session = this.session;
 
     const systemPrompt =
       customPrompt ||
@@ -415,12 +395,12 @@ IMPORTANT:
     const turnDetection =
       this.vadMode === 'server_vad'
         ? {
-            type: 'server_vad',
-            threshold: 0.90,            // 민감도 조절
-            prefix_padding_ms: 200,     // 음성 시작 전 기다림
-            silence_duration_ms: 300,  // 0.5초 침묵 후 종료
-            create_response: true,      // 자동 응답 생성
-          }
+          type: 'server_vad',
+          threshold: 0.90,            // 민감도 조절
+          prefix_padding_ms: 200,     // 음성 시작 전 기다림
+          silence_duration_ms: 300,  // 0.3초 침묵 후 종료
+          create_response: !skipResponseCreation,      // 🆕 배경 업데이트 시 자동 응답 생성 방지
+        }
         : null;
 
     // 🆕 Phase 3: Get MCP tools if available
@@ -621,7 +601,7 @@ IMPORTANT:
 
       case 'input_audio_buffer.speech_started':
         console.log('🎤 Speech started');
-        
+
         // 🆕 AI 응답 중 사용자가 말하면 현재 응답 취소 (인터럽트)
         // 비활성화됨: GPT가 말하는 중에도 마이크 입력 허용
         // if (this.isResponding) {
@@ -630,7 +610,7 @@ IMPORTANT:
         //   this.isResponding = false;
         //   this.audioQueue = []; // 오디오 큐 비우기
         // }
-        
+
         this.emit('speech_started', event);
         break;
 
@@ -718,15 +698,15 @@ IMPORTANT:
         this.emit('response_done', event);
         break;
 
-        case 'error':
-          // "Cancellation failed" 오류는 무시 (인터럽트 시 발생)
-          if (event.error?.message?.includes('Cancellation failed')) {
-            console.log('ℹ️ Cancellation error ignored (no active response)');
-            break;
-          }
-          console.error('❌ Error from server:', event.error);
-          this.emit('error', event.error);
+      case 'error':
+        // "Cancellation failed" 오류는 무시 (인터럽트 시 발생)
+        if (event.error?.message?.includes('Cancellation failed')) {
+          console.log('ℹ️ Cancellation error ignored (no active response)');
           break;
+        }
+        console.error('❌ Error from server:', event.error);
+        this.emit('error', event.error);
+        break;
 
       default:
         break;
@@ -739,8 +719,8 @@ IMPORTANT:
    * 🆕 Phase 3: Handle tool call from Realtime API
    */
   private async handleToolCall(event: any): Promise<void> {
-    if (!this.currentSessionId || !this.mcpClient) {
-      console.warn('[RealtimeServiceV3] No active session or MCP client for tool call');
+    if (!this.mcpClient) {
+      console.warn('[RealtimeServiceV3] No MCP client for tool call');
       return;
     }
 
@@ -751,7 +731,7 @@ IMPORTANT:
       // Override session_id with current session (AI may send placeholder)
       const toolArgs = {
         ...args,
-        session_id: this.currentSessionId, // Always use actual session ID
+        session_id: this.session.sessionId, // Always use actual session ID
       };
 
       console.log(`[RealtimeServiceV3] Executing tool: ${toolName}`, toolArgs);
@@ -773,16 +753,9 @@ IMPORTANT:
 
       this.sendToOpenAI(toolResponse);
 
-      // Request new response from GPT
-      const createResponse = {
-        type: 'response.create',
-      };
-
-      this.sendToOpenAI(createResponse);
-
       // 🆕 Emit tool execution event for WebSocket broadcast
       this.emit('tool_executed', {
-        sessionId: this.currentSessionId,
+        sessionId: this.session.sessionId,
         toolName,
         args,
         result,
@@ -790,27 +763,31 @@ IMPORTANT:
 
       // Update session prompt if step changed (navigation tools)
       if (result.success && toolName.startsWith('navigate_')) {
-        // Tool changed step in DB, but in-memory session is stale
-        // Need to update in-memory session from tool result
-        const session = this.cookingAgent.getSession(this.currentSessionId);
-        if (session && result.current_step_index !== undefined) {
-          session.currentStepIndex = result.current_step_index;
-          session.viewingStepIndex = result.current_step_index;
+        if (result.current_step_index !== undefined) {
+          this.session.currentStepIndex = result.current_step_index;
+          this.session.viewingStepIndex = result.current_step_index;
 
           // 🆕 Reset timer state on step change
           this.timerState = null;
 
           // 🆕 Emit timer reset event for frontend synchronization
           this.emit('timer_reset', {
-            sessionId: this.currentSessionId,
+            sessionId: this.session.sessionId,
             stepIndex: result.current_step_index,
             reason: 'step_changed'
           });
 
-          const updatedPrompt = this.generateSystemPrompt(session);
+          const updatedPrompt = this.generateSystemPrompt(this.session);
           await this.sendSessionUpdate(updatedPrompt);
         }
       }
+
+      // Request new response from GPT (AFTER session update to ensure correct context)
+      const createResponse = {
+        type: 'response.create',
+      };
+
+      this.sendToOpenAI(createResponse);
     } catch (error: any) {
       console.error('[RealtimeServiceV3] Tool execution error:', error);
 
@@ -892,7 +869,7 @@ IMPORTANT:
       /^\?+$/,                    // 물음표만
       /^!+$/,                     // 느낌표만
     ];
-    
+
     for (const pattern of noisePatterns) {
       if (pattern.test(trimmed.replace(/\s/g, ''))) {
         console.warn(`⚠️ [Filter] Noise pattern: "${trimmed}"`);

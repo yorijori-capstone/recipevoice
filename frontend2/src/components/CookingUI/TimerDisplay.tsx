@@ -11,6 +11,8 @@ interface TimerDisplayProps {
   isPaused?: boolean;
   onTimeUp?: () => void;
   onTimerStart?: () => void;
+  onTimerStop?: () => void; // 🆕 Added callback
+  onTimerReset?: () => void; // 🆕 Added callback
 }
 
 export interface TimerDisplayRef {
@@ -75,7 +77,9 @@ export const TimerDisplay = forwardRef<TimerDisplayRef, TimerDisplayProps>(({
   timerRequired,
   isPaused = false,
   onTimeUp,
-  onTimerStart
+  onTimerStart,
+  onTimerStop,
+  onTimerReset
 }, ref) => {
   const [remainingTime, setRemainingTime] = useState(estimatedTimeSec);
   const [isRunning, setIsRunning] = useState(false);
@@ -91,10 +95,14 @@ export const TimerDisplay = forwardRef<TimerDisplayRef, TimerDisplayProps>(({
         }
       }
     },
-    stopTimer: () => setIsRunning(false),
+    stopTimer: () => {
+      setIsRunning(false);
+      onTimerStop?.(); // 🆕 Call callback
+    },
     resetTimer: () => {
       setRemainingTime(estimatedTimeSec);
       setIsRunning(false);
+      onTimerReset?.(); // 🆕 Call callback
     },
     isRunning,
     remainingTime
@@ -230,7 +238,10 @@ export const TimerDisplay = forwardRef<TimerDisplayRef, TimerDisplayProps>(({
 
           <button
             className="btn btn-warning flex-grow-1"
-            onClick={() => setIsRunning(false)}
+            onClick={() => {
+              setIsRunning(false);
+              onTimerStop?.(); // 🆕 Call callback
+            }}
             disabled={!isRunning}
           >
             <i className="bi bi-pause-fill me-2"></i>
@@ -242,6 +253,7 @@ export const TimerDisplay = forwardRef<TimerDisplayRef, TimerDisplayProps>(({
             onClick={() => {
               setRemainingTime(estimatedTimeSec);
               setIsRunning(false);
+              onTimerReset?.(); // 🆕 Call callback
             }}
           >
             <i className="bi bi-arrow-clockwise me-2"></i>
