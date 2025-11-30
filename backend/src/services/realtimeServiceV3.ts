@@ -27,6 +27,9 @@ export class RealtimeServiceV3 extends EventEmitter {
   
   // 🆕 인터럽트 처리를 위한 응답 상태 추적
   private isResponding: boolean = false;
+  
+  // 🆕 중복 로그 방지를 위한 필드
+  private lastTranscriptItemId: string | null = null;
 
   // Integration with agents
   private cookingAgent: CookingAgentV3;
@@ -384,7 +387,7 @@ IMPORTANT:
             type: 'server_vad',
             threshold: 0.85,            // 민감도 조절
             prefix_padding_ms: 300,     // 음성 시작 전 기다림
-            silence_duration_ms: 500,  // 1200 → 1500 (1.5초 침묵 후 종료)
+            silence_duration_ms: 1500,  // 500 → 1500 (1.5초 침묵 후 종료) - 반복 방지
             create_response: true,      // 자동 응답 생성
           }
         : null;
@@ -582,6 +585,7 @@ IMPORTANT:
         console.log('⏹️ Response cancelled - ready for new input');
         this.isResponding = false;
         this.audioQueue = [];
+        this.lastTranscriptItemId = null; // 🆕 다음 응답을 위해 초기화
         break;
 
       case 'input_audio_buffer.speech_started':
@@ -659,7 +663,11 @@ IMPORTANT:
         break;
 
       case 'response.audio_transcript.done':
-        console.log('🤖 [AI]:', event.transcript);
+        // 🔧 중복 로그 방지: item_id로 추적하여 한 번만 로그 출력
+        if (!this.lastTranscriptItemId || this.lastTranscriptItemId !== event.item_id) {
+          console.log('🤖 [AI]:', event.transcript);
+          this.lastTranscriptItemId = event.item_id;
+        }
         this.emit('assistant_transcript_done', {
           transcript: event.transcript,
           item_id: event.item_id,
@@ -675,6 +683,7 @@ IMPORTANT:
       case 'response.done':
         console.log('✅ Response completed');
         this.isResponding = false; // 🆕 AI 응답 완료
+        this.lastTranscriptItemId = null; // 🆕 다음 응답을 위해 초기화
         this.emit('response_done', event);
         break;
 
