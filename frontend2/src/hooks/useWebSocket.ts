@@ -8,7 +8,7 @@ interface Transcript {
 
 interface UseWebSocketOptions {
   onUserTranscription?: (text: string) => void;
-  onAssistantTranscript?: (text: string) => void;
+  onAssistantTranscript?: (text: string, isNewResponse: boolean) => void;
   onFunctionCall?: (name: string, callId: string, args: any) => void;
   onError?: (error: string) => void;
   // V3 events (MCP Tool Calling)
@@ -26,15 +26,34 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
 
   const wsRef = useRef<WebSocket | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const audioSourceRef = useRef<AudioBufferSourceNode | null>(null); // 🆕 Track current audio source
   const audioQueueRef = useRef<Float32Array[]>([]);
   const isPlayingRef = useRef(false);
   const currentTranscriptRef = useRef<string>('');
-  
-  // Store options in ref to avoid stale closures and unnecessary reconnections
+  const isNewResponseRef = useRef<boolean>(true);
+
+  // Store options in ref to avoid stale closures
   const optionsRef = useRef(options);
   useEffect(() => {
     optionsRef.current = options;
   }, [options]);
+
+  // 🆕 Helper to clear audio queue and stop playback
+  const clearAudioQueue = useCallback(() => {
+    // Stop current audio source if playing
+    if (audioSourceRef.current) {
+      try {
+        audioSourceRef.current.stop();
+        audioSourceRef.current.disconnect();
+      } catch (e) {
+        // Ignore errors if already stopped
+      }
+      audioSourceRef.current = null;
+    }
+
+    audioQueueRef.current = [];
+    isPlayingRef.current = false;
+  }, []);
 
   const playAudioQueue = useCallback(async () => {
     if (audioQueueRef.current.length === 0 || !audioContextRef.current) {
@@ -53,7 +72,11 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     source.buffer = audioBuffer;
     source.connect(audioContext.destination);
 
+    // 🆕 Store reference to current source
+    audioSourceRef.current = source;
+
     source.onended = () => {
+      audioSourceRef.current = null; // Clear reference when done
       playAudioQueue();
     };
 
@@ -68,7 +91,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
 
     console.log(`🔌 [useWebSocket] connect() called with sessionId: ${sessionId}`);
     setStatus('connecting');
-    // Dynamic WebSocket URL based on current hostname (works on different networks)
+
     const hostname = window.location.hostname;
     const wsUrl = `ws://${hostname}:3001`;
     console.log(`🔌 [useWebSocket] Connecting to: ${wsUrl}`);
@@ -81,7 +104,6 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
       setIsConnected(true);
       setError(null);
 
-      // Initialize session with context
       if (sessionId) {
         ws.send(JSON.stringify({
           type: 'init_session',
@@ -103,7 +125,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
               text: userText,
               timestamp: new Date()
             }]);
-            // Call callback if provided
+            isNewResponseRef.current = true;
             if (optionsRef.current.onUserTranscription) {
               optionsRef.current.onUserTranscription(userText);
             }
@@ -111,21 +133,18 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
 
           case 'assistant_transcript_delta':
             currentTranscriptRef.current += data.delta;
-            // Call callback with accumulated text
             if (optionsRef.current.onAssistantTranscript) {
-              optionsRef.current.onAssistantTranscript(currentTranscriptRef.current);
+              optionsRef.current.onAssistantTranscript(currentTranscriptRef.current, isNewResponseRef.current);
+              isNewResponseRef.current = false;
             }
             break;
 
           case 'assistant_transcript_done':
             if (currentTranscriptRef.current) {
-              setTranscripts(prev => [...prev, {
-                role: 'assistant',
-                text: currentTranscriptRef.current,
-                timestamp: new Date()
-              }]);
-              currentTranscriptRef.current = '';
+              console.log('[useWebSocket] Assistant transcript completed:', currentTranscriptRef.current);
             }
+            currentTranscriptRef.current = '';
+            isNewResponseRef.current = true;
             break;
 
           case 'audio_delta':
@@ -134,6 +153,17 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
             if (!isPlayingRef.current) {
               playAudioQueue();
             }
+            break;
+
+          case 'speech_started':
+            console.log('🎤 [useWebSocket] User speech started');
+            // 🔧 User preference: Do NOT stop audio when user speaks. Let AI finish its sentence.
+            // clearAudioQueue(); 
+            break;
+
+          case 'response.created':
+            console.log('🔄 [useWebSocket] New response started - clearing audio queue');
+            clearAudioQueue(); // 🆕 Use helper
             break;
 
           case 'vad_mode_changed':
@@ -211,7 +241,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
       const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
       audioContextRef.current = new AudioContextClass({ sampleRate: 24000 });
     }
-  }, [playAudioQueue]); // options removed - using optionsRef instead
+  }, [playAudioQueue, clearAudioQueue]);
 
   const disconnect = useCallback(() => {
     console.log('🔌 [useWebSocket] disconnect() called');
@@ -220,13 +250,17 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
       wsRef.current.close();
       wsRef.current = null;
     }
+
+    // 🆕 Cleanup audio
+    clearAudioQueue();
+
     if (audioContextRef.current) {
       audioContextRef.current.close();
       audioContextRef.current = null;
     }
     setStatus('disconnected');
     setIsConnected(false);
-  }, []);
+  }, [clearAudioQueue]);
 
   const sendAudioChunk = useCallback((audioData: string) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -275,7 +309,6 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     }
   }, []);
 
-  // 🆕 Send timer state to backend (for AI context awareness)
   const sendTimerState = useCallback((timerState: {
     isRunning: boolean;
     isCompleted: boolean;

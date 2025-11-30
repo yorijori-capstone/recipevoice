@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { RecipeCard } from '../components/RecipeCard';
 import { RecipeGenerateModal } from '../components/RecipeGenerateModal';
@@ -272,7 +272,7 @@ export function DashboardV3() {
               </button>
             )}
           </div>
-          
+
           {/* Realtime search toggle */}
           <div className="d-flex justify-content-end mt-2">
             <div className="form-check form-switch">

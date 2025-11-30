@@ -26,7 +26,6 @@ export function CookingMode() {
     loading,
     error,
     startSession,
-    recoverSession,
     nextStep,
     previousStep,
     navigateNext,
@@ -41,7 +40,7 @@ export function CookingMode() {
       console.log('[CookingMode] Session already initialized, skipping');
       return;
     }
-    
+
     if (!recipeId) {
       alert('레시피 ID가 없습니다.');
       navigate('/');
@@ -50,38 +49,23 @@ export function CookingMode() {
 
     sessionInitializedRef.current = true;
 
-    // Check if there's a saved session
-    const savedSessionId = localStorage.getItem('yorijori_current_session_id');
-    const savedRecipeId = localStorage.getItem('yorijori_current_recipe_id');
+    // 🆕 페이지 재진입 시 항상 새 세션 시작 (이전 세션 복구 안 함)
+    console.log('[CookingMode] Page loaded - starting fresh session for recipe:', recipeId);
+    localStorage.removeItem('yorijori_current_session_id');
+    localStorage.removeItem('yorijori_current_recipe_id');
 
-    if (savedSessionId && savedRecipeId === recipeId) {
-      // Same recipe - try to recover session
-      console.log('[CookingMode] Recovering session for same recipe:', recipeId);
-      recoverSession(savedSessionId).catch((err) => {
-        console.error('[CookingMode] Recovery failed, starting new session:', err);
-        startSession(recipeId);
-      });
-    } else {
-      // Different recipe or no saved session - start new session
-      if (savedSessionId) {
-        console.log('[CookingMode] Different recipe detected, clearing old session');
-        localStorage.removeItem('yorijori_current_session_id');
-        localStorage.removeItem('yorijori_current_recipe_id');
-      }
-      console.log('[CookingMode] Starting new session for recipe:', recipeId);
-      startSession(recipeId).catch((err) => {
-        console.error('Failed to start session:', err);
-        alert('요리 세션을 시작할 수 없습니다.');
-        navigate(`/recipe/${recipeId}`);
-      });
-    }
+    startSession(recipeId).catch((err) => {
+      console.error('Failed to start session:', err);
+      alert('요리 세션을 시작할 수 없습니다.');
+      navigate(`/recipe/${recipeId}`);
+    });
 
     // Cleanup on unmount
     return () => {
       endSession();
-      sessionInitializedRef.current = false; // Reset for next mount
+      // 🔧 React StrictMode에서 cleanup이 즉시 호출되므로 ref를 리셋하지 않음
     };
-  }, [recipeId]); // 원래대로 recipeId만 의존성
+  }, [recipeId]);
 
   // UI 버튼 클릭 - 로컬 상태만 변경 (원래 방식)
   const handleNext = () => {
@@ -122,12 +106,14 @@ export function CookingMode() {
         if (timerRef.current) {
           console.log('[CookingMode] Stopping timer via voice command');
           timerRef.current.stopTimer();
+          // State update is handled by onTimerStop callback in TimerDisplay
         }
         break;
       case 'reset_timer':
         if (timerRef.current) {
           console.log('[CookingMode] Resetting timer via voice command');
           timerRef.current.resetTimer();
+          // State update is handled by onTimerReset callback in TimerDisplay
         }
         break;
       default:
@@ -175,13 +161,33 @@ export function CookingMode() {
     timerTTSCalledRef.current = false; // Reset flag when timer starts
   };
 
-  const handleEndSession = async () => {
-    const confirmed = window.confirm('요리를 종료하시겠습니까?');
-    if (confirmed) {
-      await endSession();
-      navigate('/');
+  // 🆕 Timer Stop Handler
+  const handleTimerStop = () => {
+    if (voiceRef.current && timerRef.current && viewingStep) {
+      voiceRef.current.sendTimerState({
+        isRunning: false,
+        isCompleted: false,
+        remainingTime: timerRef.current.remainingTime,
+        totalTime: viewingStep.estimated_time_sec
+      });
+      console.log('[CookingMode] Timer stopped, state sent to backend');
     }
   };
+
+  // 🆕 Timer Reset Handler
+  const handleTimerResetLocal = () => {
+    if (voiceRef.current && viewingStep) {
+      voiceRef.current.sendTimerState({
+        isRunning: false,
+        isCompleted: false,
+        remainingTime: viewingStep.estimated_time_sec,
+        totalTime: viewingStep.estimated_time_sec
+      });
+      console.log('[CookingMode] Timer reset, state sent to backend');
+    }
+  };
+
+
 
   // V3: Handle auto step change from MCP Tool Calling
   const handleStepAutoChanged = (data: any) => {
@@ -190,7 +196,7 @@ export function CookingMode() {
     // Update local session state from MCP tool result
     // Support both snake_case (current_step_index) and camelCase (stepIndex)
     const newStepIndex = data?.current_step_index ?? data?.stepIndex;
-    
+
     if (newStepIndex !== undefined) {
       console.log(`✨ Auto-moved to step: ${newStepIndex + 1}`);
       updateSessionState({
@@ -213,9 +219,9 @@ export function CookingMode() {
   };
 
   // V3: Handle timer reset from Server
-  const handleTimerReset = (data: { stepIndex: number; reason: string }) => {
-    console.log('[CookingMode] Timer reset:', data);
-    
+  const handleTimerResetFromServer = (data: { stepIndex: number; reason: string }) => {
+    console.log('[CookingMode] Timer reset from server:', data);
+
     // Force reset timer when step changes
     if (timerRef.current) {
       console.log('[CookingMode] Forcing timer reset due to step change');
@@ -250,14 +256,6 @@ export function CookingMode() {
       </div>
     );
   }
-
-  console.log('[CookingMode] Render State:', {
-    loading,
-    error,
-    hasSession: !!session,
-    plannedSteps: session?.plannedSteps?.length,
-    viewingStepIndex: session?.viewingStepIndex
-  });
 
   // No session or session not fully loaded
   if (!session || !session.plannedSteps || session.plannedSteps.length === 0) {
@@ -373,7 +371,7 @@ export function CookingMode() {
             onCommandDetected={handleVoiceCommand}
             onStepAutoChanged={handleStepAutoChanged}
             onSessionStateUpdated={handleSessionStateUpdated}
-            onTimerReset={handleTimerReset}
+            onTimerReset={handleTimerResetFromServer}
           />
         </div>
       )}
@@ -420,8 +418,6 @@ export function CookingMode() {
         </div>
       ) : (
         <div>
-          {/* Voice Interaction Section - moved above */}
-
           {/* Step Display with Controls */}
           {viewingStep && (
             <div className="card shadow-lg mb-4">
@@ -489,6 +485,8 @@ export function CookingMode() {
                 isPaused={session.status === 'paused'}
                 onTimeUp={handleTimerComplete}
                 onTimerStart={handleTimerStart}
+                onTimerStop={handleTimerStop} // 🆕
+                onTimerReset={handleTimerResetLocal} // 🆕
               />
             </div>
           )}
@@ -520,48 +518,42 @@ export function CookingMode() {
         </div>
       )}
 
-
-
-
-
-      {/* Planning Result Modal - V3에서는 cleaned_recipes에 저장되어 있음 */}
-      {
-        showPlanModal && (
-          <div className="modal show d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-            <div className="modal-dialog modal-dialog-centered">
-              <div className="modal-content">
-                <div className="modal-header">
-                  <h5 className="modal-title">Planning 정보</h5>
-                  <button
-                    type="button"
-                    className="btn-close"
-                    onClick={() => setShowPlanModal(false)}
-                  ></button>
-                </div>
-                <div className="modal-body">
-                  <p className="text-muted">
-                    이 레시피는 V3 아키텍처(MCP Tool Calling)를 사용하여 미리 계획되었습니다.
-                  </p>
-                  <ul>
-                    <li>총 단계: {session.totalSteps}개</li>
-                    <li>Cleaned Recipe ID: {session.cleanedRecipeId}</li>
-                    <li>음성 최적화 스크립트 준비 완료</li>
-                  </ul>
-                </div>
-                <div className="modal-footer">
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => setShowPlanModal(false)}
-                  >
-                    닫기
-                  </button>
-                </div>
+      {/* Planning Result Modal */}
+      {showPlanModal && (
+        <div className="modal show d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Planning 정보</h5>
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={() => setShowPlanModal(false)}
+                ></button>
+              </div>
+              <div className="modal-body">
+                <p className="text-muted">
+                  이 레시피는 V3 아키텍처(MCP Tool Calling)를 사용하여 미리 계획되었습니다.
+                </p>
+                <ul>
+                  <li>총 단계: {session.totalSteps}개</li>
+                  <li>Cleaned Recipe ID: {session.cleanedRecipeId}</li>
+                  <li>음성 최적화 스크립트 준비 완료</li>
+                </ul>
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowPlanModal(false)}
+                >
+                  닫기
+                </button>
               </div>
             </div>
           </div>
-        )
-      }
-    </div >
+        </div>
+      )}
+    </div>
   );
 }

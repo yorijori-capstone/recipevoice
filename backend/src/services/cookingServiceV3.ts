@@ -4,7 +4,7 @@
  */
 
 import { CookingAgentV3 } from '../agents/cookingAgentV3.js';
-import { RealtimeServiceV3 } from './realtimeServiceV3.js';
+// import { RealtimeServiceV3 } from './realtimeServiceV3.js'; // Removed singleton
 import { getMCPClient, shutdownMCPClient, MCPClientManager } from '../mcp/mcp-client.js';
 
 /**
@@ -17,7 +17,7 @@ export class CookingServiceV3 {
 
   // Core services (singleton instances)
   private cookingAgent: CookingAgentV3 | null = null;
-  private realtimeService: RealtimeServiceV3 | null = null;
+  // private realtimeService: RealtimeServiceV3 | null = null; // Removed singleton
   private mcpClient: MCPClientManager | null = null;
 
   constructor(apiKey: string) {
@@ -49,15 +49,11 @@ export class CookingServiceV3 {
         this.mcpClient = null;
       }
 
-      // Step 3: Create RealtimeServiceV3 (with MCP)
-      this.realtimeService = new RealtimeServiceV3({
-        apiKey: this.apiKey,
-        cookingAgent: this.cookingAgent,
-        mcpClient: this.mcpClient || undefined,
-        model: 'gpt-realtime',
-        voice: 'alloy',
-      });
-      console.log('[CookingServiceV3] ✅ RealtimeServiceV3 created');
+      // Step 3: Set MCP Client on Agent
+      this.cookingAgent.setMCPClient(this.mcpClient);
+      console.log('[CookingServiceV3] ✅ MCP Client set on Agent');
+
+      // RealtimeServiceV3 is now managed by CookingAgentV3 per session
 
       this.initialized = true;
       console.log('[CookingServiceV3] ✅ Initialized successfully (V3 Architecture - MCP Only)');
@@ -75,16 +71,16 @@ export class CookingServiceV3 {
 
     console.log('[CookingServiceV3] Shutting down...');
 
-    if (this.realtimeService?.isConnected()) {
-      this.realtimeService.disconnect();
-    }
+    // if (this.realtimeService?.isConnected()) {
+    //   this.realtimeService.disconnect();
+    // }
 
     if (this.mcpClient) {
       await shutdownMCPClient();
     }
 
     this.cookingAgent = null;
-    this.realtimeService = null;
+    // this.realtimeService = null;
     this.mcpClient = null;
     this.initialized = false;
 
@@ -104,12 +100,12 @@ export class CookingServiceV3 {
   /**
    * Get RealtimeServiceV3 instance
    */
-  getRealtimeService(): RealtimeServiceV3 {
-    if (!this.initialized || !this.realtimeService) {
-      throw new Error('CookingServiceV3 not initialized. Call initialize() first.');
-    }
-    return this.realtimeService;
-  }
+  // getRealtimeService(): RealtimeServiceV3 {
+  //   if (!this.initialized || !this.realtimeService) {
+  //     throw new Error('CookingServiceV3 not initialized. Call initialize() first.');
+  //   }
+  //   return this.realtimeService;
+  // }
 
   /**
    * Check if service is initialized

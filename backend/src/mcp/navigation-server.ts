@@ -182,6 +182,42 @@ async function handleNextStep(sessionId: string) {
       };
     }
 
+    // 🆕 타이머가 실행 중이면 자동으로 중지
+    const timerCheckResult = await client.query(
+      `SELECT state_data, created_at FROM session_states
+       WHERE session_id = $1 AND state_type = 'timer_event'
+       ORDER BY created_at DESC LIMIT 1`,
+      [sessionId]
+    );
+
+    if (timerCheckResult.rows.length > 0) {
+      const lastTimer = timerCheckResult.rows[0].state_data;
+      const now = new Date();
+      const endTime = new Date(lastTimer.end_time);
+      
+      // 타이머가 실행 중이면 (마지막 이벤트가 start이고 아직 만료되지 않음)
+      if (lastTimer.action === 'start' && now < endTime) {
+        // 타이머 중지 이벤트 기록
+        await client.query(
+          `INSERT INTO session_states (session_id, state_type, state_data)
+           VALUES ($1, $2, $3)`,
+          [
+            sessionId,
+            'timer_event',
+            JSON.stringify({
+              action: 'stop',
+              label: lastTimer.label,
+              duration_seconds: lastTimer.duration_seconds,
+              step: lastTimer.step,
+              start_time: lastTimer.start_time,
+              stop_time: now.toISOString(),
+            }),
+          ]
+        );
+        console.log(`[MCP Navigation] Timer stopped automatically before step change`);
+      }
+    }
+
     const newStepIndex = current_step_index + 1;
 
     // Update session
