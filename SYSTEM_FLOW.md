@@ -59,6 +59,52 @@ Backend RecipeCleaner:
 Frontend: 생성 완료 → DashboardV3에서 즉시 검색 가능
 ```
 
+### 2-3. YouTube 영상 검색 및 Import
+```
+Frontend: YoutubeSearch.tsx
+    ↓
+사용자 검색어 입력: "김치찌개 레시피"
+    ↓
+API: GET /api/youtube/search?query=김치찌개&limit=5
+    ↓
+Backend: MCP videos.searchVideos 호출
+    ↓
+YouTube Data API: 영상 메타/thumbnail/설명 반환
+    ↓
+Frontend: 영상 목록 표시 (thumbnail, title, channelTitle)
+    ↓
+사용자: 영상 하나 선택 → "레시피로 가져오기" 클릭
+    ↓
+API: POST /api/youtube/import { videoId, language: "ko" }
+    ↓
+Backend YoutubeImportService:
+    1. MCP videos.getVideo + transcripts.getTranscript 호출
+    2. recipe_id = recipe_yt_<videoId> 규칙으로 저장
+    3. recipes 테이블에 raw_data (JSONB) 저장:
+       {
+         "videoId": "dQw4w9WgXcQ",
+         "title": "김치찌개 맛있게 끓이는 법",
+         "transcript": [{ "offset": 0, "duration": 3.5, "text": "먼저..." }],
+         "thumbnails": [{ "quality": "high", "url": "https://..." }],
+         "source": "youtube-mcp-server"
+       }
+    ↓
+Backend RecipeCleaner:
+    4. transcript를 구조화하여 Planning 실행
+    5. cleaned_recipes + cleaned_steps 생성
+    ↓
+Frontend: Import 완료 → DashboardV3에서 검색/요리 시작 가능
+```
+
+**YouTube Import 오류 처리:**
+- **TRANSCRIPT_UNAVAILABLE (404)**: 자막 없음 → 다른 영상 선택 안내
+- **YOUTUBE_QUOTA_EXCEEDED (429)**: API 제한 → 관리자에게 API 키 추가 안내
+- **MCP_BRIDGE_FAILED (502)**: MCP 서버 미동작 → `npm run youtube:mcp` 확인
+
+**참고 문서:**
+- `docs/youtube-mcp-search-pipeline.md`
+- `backend/scripts/run-youtube-mcp.ts`
+
 ## 3. 요리 세션 시작 (0.1초 ⚡)
 
 ```
@@ -165,7 +211,7 @@ Frontend: 스피커로 음성 출력
 
 ### 레시피 데이터 경로:
 ```
-[Raw Recipe DB]
+[Raw Recipe DB / YouTube Import / AI Generation]
     ↓ (Planning 1회 실행)
 [cleaned_recipes + cleaned_steps] ← PostgreSQL 영구 저장
     ↓ (세션 시작 시)
@@ -179,17 +225,19 @@ Frontend: 스피커로 음성 출력
 ### API 호출 순서:
 ```
 1. POST /api/recipes/generate          (AI 레시피 생성)
-2. GET  /api/recipes/search/cleaned    (레시피 검색)
-3. POST /api/cooking/v3/start          (세션 시작)
-4. WebSocket init_session              (Realtime 연결)
-5. WebSocket audio_chunk               (음성 입력)
-6. POST /api/cooking/v3/session/:id/next  (수동 다음 단계)
-7. DELETE /api/recipes/:recipeId       (AI 레시피 삭제)
+2. GET  /api/youtube/search            (YouTube 영상 검색)
+3. POST /api/youtube/import            (YouTube 영상 Import)
+4. GET  /api/recipes/search/cleaned    (레시피 검색)
+5. POST /api/cooking/v3/start          (세션 시작)
+6. WebSocket init_session              (Realtime 연결)
+7. WebSocket audio_chunk               (음성 입력)
+8. POST /api/cooking/v3/session/:id/next  (수동 다음 단계)
+9. DELETE /api/recipes/:recipeId       (AI 레시피 삭제)
 ```
 
 ### DB 테이블 역할:
 ```
-recipes              → 원본 레시피 (102개 + AI 생성)
+recipes              → 원본 레시피 (102개 + YouTube Import + AI 생성)
 ingredients          → 재료 목록
 steps                → 원본 조리 단계
 cleaned_recipes      → Planning 결과 (opening/closing remark)
@@ -221,6 +269,7 @@ session_states       → 세션 상태 히스토리 (단계 이동 로그)
 App.tsx
     ↓
 DashboardV3.tsx (레시피 검색/선택)
+    ├─ YoutubeSearch.tsx (YouTube 영상 검색/Import)
     ↓ 요리 시작 클릭
 CookingMode.tsx (메인 페이지)
     ├─ useCookingSessionV3 (세션 관리)
@@ -245,6 +294,7 @@ ServerV3.ts (Express + WebSocket)
     ├─ RecipeService (원본 레시피)
     ├─ RecipeCleaner (Planning 결과)
     ├─ RecipeCreator (AI 레시피 생성)
+    ├─ YoutubeImportService (YouTube MCP Integration)
     ├─ SessionService (세션 DB 관리)
     └─ PlanningService (GPT-5-nano Planning)
 ```
