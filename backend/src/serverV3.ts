@@ -2,14 +2,17 @@
  * Server V3 - Uses V3 architecture with CookingServiceV3 and MCP Tool Calling
  */
 
+import dotenv from 'dotenv';
+
+// Load environment variables BEFORE importing any modules that need them
+dotenv.config();
+
 import express from 'express';
 import { WebSocketServer, WebSocket } from 'ws';
-import dotenv from 'dotenv';
 import cors from 'cors';
 import recipeRoutes from './routes/recipes.js';
 import cookingV3Routes, { getCookingServiceV3 } from './routes/cookingV3.js';
-
-dotenv.config();
+import youtubeRoutes from './routes/youtube.js';
 
 const app = express();
 app.use(cors());
@@ -22,6 +25,9 @@ app.get('/health', (req, res) => {
 
 // Recipe API routes
 app.use('/api/recipes', recipeRoutes);
+
+// YouTube ingestion routes
+app.use('/api/youtube', youtubeRoutes);
 
 // Cooking mode API routes (V3: MCP Tool Calling)
 app.use('/api/cooking/v3', cookingV3Routes);  // v2 → v3로 변경
