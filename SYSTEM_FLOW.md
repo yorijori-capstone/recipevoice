@@ -124,7 +124,7 @@ WebSocket: { type: 'audio_chunk', audio: base64 }
     ↓
 Backend RealtimeServiceV3 → OpenAI Realtime API
     ↓
-OpenAI GPT-4o-realtime:
+OpenAI GPT-realtime:
     1. 음성 → 텍스트 변환
     2. Transcript: "다음 단계로 가줘"
     3. Native Tool Calling: navigate_next_step() 자동 호출
@@ -155,7 +155,7 @@ Frontend:
        - ProgressBar: 1/15 → 2/15
        - StepDisplay: 2단계 스크립트
     ↓
-OpenAI GPT-4o-realtime: TTS 음성 응답
+OpenAI gpt-realtime: TTS 음성 응답
     "2단계입니다. 고춧가루 2컵을..."
     ↓
 Frontend: 스피커로 음성 출력
@@ -173,7 +173,7 @@ Frontend: 스피커로 음성 출력
     ↓ (WebSocket 연결 시)
 [RealtimeServiceV3 System Prompt] ← OpenAI API 전송
     ↓ (음성 대화)
-[GPT-4o-realtime] ← 스크립트 기반 음성 안내
+[GPT-realtime] ← 스크립트 기반 음성 안내
 ```
 
 ### API 호출 순서:

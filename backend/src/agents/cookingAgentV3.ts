@@ -7,6 +7,8 @@ import { EventEmitter } from 'events';
 import { RecipeCleaner, CleanedRecipe, PlannedStep, ProcessStep, Ingredient, PlanningOutput } from '../services/recipeCleaner.js';
 import { SessionService, CookingSessionData } from '../services/sessionService.js';
 import { pool } from '../db/pool.js';
+import { RealtimeServiceV3 } from '../services/realtimeServiceV3.js'; // 🆕 Import
+import { MCPClientManager } from '../mcp/mcp-client.js'; // 🆕 Import
 
 // ============================================================================
 // Interfaces
@@ -28,6 +30,7 @@ export interface CookingSession {
   status: 'active' | 'paused' | 'completed' | 'error';
   ingredients: Ingredient[];  // 🆕 재료 목록 추가
   startedAt: Date;
+  realtimeService?: RealtimeServiceV3; // 🆕 Session specific service
 }
 
 // ============================================================================
@@ -38,13 +41,23 @@ export class CookingAgentV3 extends EventEmitter {
   private recipeCleaner: RecipeCleaner;
   private sessionService: SessionService;
   private sessions: Map<string, CookingSession> = new Map();
+  private mcpClient: MCPClientManager | null = null; // 🆕 MCP Client reference
+  private apiKey: string; // 🆕 Store API Key
 
   constructor(apiKey: string) {
     super();
+    this.apiKey = apiKey;
     this.recipeCleaner = new RecipeCleaner(apiKey);
     this.sessionService = new SessionService();
 
     console.log('[CookingAgentV3] Initialized');
+  }
+
+  /**
+   * 🆕 Set MCP Client
+   */
+  setMCPClient(client: MCPClientManager | null) {
+    this.mcpClient = client;
   }
 
   // ==========================================================================
@@ -75,7 +88,7 @@ export class CookingAgentV3 extends EventEmitter {
       // 🆕 Use process array from planning_result (primary source)
       const processSteps = cleanedRecipe.process || [];
       const totalSteps = processSteps.length || cleanedRecipe.planned_steps.length;
-      
+
       const session: CookingSession = {
         sessionId: sessionData.session_id,
         recipeId,
@@ -93,6 +106,16 @@ export class CookingAgentV3 extends EventEmitter {
         ingredients: cleanedRecipe.ingredients,  // 🆕 재료 목록 추가
         startedAt: new Date()
       };
+
+      // 🆕 Create RealtimeServiceV3 for this session
+      session.realtimeService = new RealtimeServiceV3({
+        apiKey: this.apiKey,
+        session: session,
+        cookingAgent: this,
+        mcpClient: this.mcpClient || undefined,
+        model: 'gpt-realtime-mini', // Use specific model
+        voice: 'alloy'
+      });
 
       this.sessions.set(session.sessionId, session);
 
@@ -154,7 +177,7 @@ export class CookingAgentV3 extends EventEmitter {
       // 세션 객체 재구성
       const processSteps = cleanedRecipe.process || [];
       const totalSteps = processSteps.length || cleanedRecipe.planned_steps.length;
-      
+
       const session: CookingSession = {
         sessionId: sessionData.session_id,
         recipeId: cleanedRecipe.recipe_id,
@@ -172,6 +195,16 @@ export class CookingAgentV3 extends EventEmitter {
         ingredients: cleanedRecipe.ingredients,
         startedAt: sessionData.started_at
       };
+
+      // 🆕 Create RealtimeServiceV3 for this session
+      session.realtimeService = new RealtimeServiceV3({
+        apiKey: this.apiKey,
+        session: session,
+        cookingAgent: this,
+        mcpClient: this.mcpClient || undefined,
+        model: 'gpt-realtime-mini',
+        voice: 'alloy'
+      });
 
       // 메모리에 저장
       this.sessions.set(session.sessionId, session);
@@ -217,8 +250,17 @@ export class CookingAgentV3 extends EventEmitter {
       // Update database
       await this.sessionService.endSession(sessionId);
 
+      // 🆕 Disconnect RealtimeService
+      if (session.realtimeService) {
+        session.realtimeService.disconnect();
+        session.realtimeService = undefined;
+      }
+
       // Update in-memory
       session.status = 'completed';
+
+      // 🆕 Remove from memory to prevent leaks
+      this.sessions.delete(sessionId);
 
       console.log(`[CookingAgentV3] Session ended: ${sessionId}`);
 
